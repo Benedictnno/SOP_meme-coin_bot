@@ -1,70 +1,9 @@
 "use client"
 import React, { useState, useEffect } from 'react';
+import { TokenData, EnhancedAlert, BotSettings, ValidationChecks } from '@/types';
 import { Bell, Play, Pause, Settings, Download, X, TrendingUp, Activity, CheckCircle, XCircle, DollarSign, Users, Zap, ExternalLink, RefreshCw, BarChart3, PieChart, Clock, Target, Shield, Twitter, AlertTriangle, ChevronRight, Star } from 'lucide-react';
 
-interface TokenData {
-  symbol: string;
-  mint: string;
-  name: string;
-  narrative: string;
-  liquidity: number;
-  volumeIncrease: number;
-  topHolderPercent: number;
-  priceUSD: string;
-  marketCap: number;
-  socials?: {
-    twitter?: string;
-    telegram?: string;
-    website?: string;
-  };
-}
-
-interface ValidationChecks {
-  narrative: boolean;
-  attention: boolean;
-  liquidity: boolean;
-  volume: boolean;
-  contract: boolean;
-  holders: boolean;
-  sellTest: boolean;
-}
-
-interface EnhancedAlert {
-  id: string;
-  timestamp: string;
-  token: TokenData;
-  checks: ValidationChecks;
-  isValid: boolean;
-  passedChecks: number;
-  totalChecks: number;
-  setupType: 'Base Break' | 'Pullback Entry';
-  rugCheckScore: number;
-  compositeScore: number;
-  socialSignals: {
-    twitterMentions: number;
-    sentiment: string;
-    overallScore: number;
-  };
-  whaleActivity: {
-    involved: boolean;
-    confidence: number;
-    score: number;
-  };
-  timeMultiplier: number;
-  recommendations: string[];
-  risks: string[];
-}
-
-interface BotSettings {
-  minLiquidity: number;
-  maxTopHolderPercent: number;
-  minVolumeIncrease: number;
-  scanInterval: number;
-  enableTelegramAlerts: boolean;
-  minCompositeScore: number;
-  minSocialScore: number;
-  whaleOnly: boolean;
-}
+// Local interfaces removed in favor of shared types
 
 interface PerformanceMetrics {
   totalAlerts: number;
