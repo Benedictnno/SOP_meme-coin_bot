@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { getDatabase } from '@/lib/mongodb';
 
 interface WaitlistEntry {
     email: string;
@@ -8,9 +7,7 @@ interface WaitlistEntry {
     ip?: string;
 }
 
-const WAITLIST_FILE = path.join(process.cwd(), 'waitlist.json');
-
-// Email validation regex
+// Email validation regex - keeping strict validation
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: NextRequest) {
@@ -35,45 +32,47 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Read existing waitlist
-        let waitlist: WaitlistEntry[] = [];
         try {
-            const fileContent = await fs.readFile(WAITLIST_FILE, 'utf-8');
-            waitlist = JSON.parse(fileContent);
-        } catch (error) {
-            // File doesn't exist yet, will create it
-            waitlist = [];
-        }
+            const db = await getDatabase();
+            const collection = db.collection('waitlist');
 
-        // Check for duplicates
-        const exists = waitlist.some((entry) => entry.email === trimmedEmail);
-        if (exists) {
+            // Check for duplicates
+            const existingEntry = await collection.findOne({ email: trimmedEmail });
+
+            if (existingEntry) {
+                return NextResponse.json(
+                    { success: false, message: 'Email already registered' },
+                    { status: 409 }
+                );
+            }
+
+            // Add new entry
+            const newEntry: WaitlistEntry = {
+                email: trimmedEmail,
+                timestamp: new Date().toISOString(),
+                ip: request.ip || request.headers.get('x-forwarded-for') || undefined,
+            };
+
+            await collection.insertOne(newEntry);
+
+            // Get total count for display
+            const count = await collection.countDocuments();
+
             return NextResponse.json(
-                { success: false, message: 'Email already registered' },
-                { status: 409 }
+                {
+                    success: true,
+                    message: 'Successfully joined the waitlist!',
+                    count: count
+                },
+                { status: 201 }
+            );
+        } catch (dbError) {
+            console.error('Database error:', dbError);
+            return NextResponse.json(
+                { success: false, message: 'Database connection failed. Please try again later.' },
+                { status: 503 }
             );
         }
-
-        // Add new entry
-        const newEntry: WaitlistEntry = {
-            email: trimmedEmail,
-            timestamp: new Date().toISOString(),
-            ip: request.ip || request.headers.get('x-forwarded-for') || undefined,
-        };
-
-        waitlist.push(newEntry);
-
-        // Save to file
-        await fs.writeFile(WAITLIST_FILE, JSON.stringify(waitlist, null, 2), 'utf-8');
-
-        return NextResponse.json(
-            {
-                success: true,
-                message: 'Successfully joined the waitlist!',
-                count: waitlist.length
-            },
-            { status: 201 }
-        );
     } catch (error) {
         console.error('Waitlist API error:', error);
         return NextResponse.json(
@@ -85,16 +84,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
     try {
-        const fileContent = await fs.readFile(WAITLIST_FILE, 'utf-8');
-        const waitlist: WaitlistEntry[] = JSON.parse(fileContent);
+        const db = await getDatabase();
+        const collection = db.collection('waitlist');
+        const count = await collection.countDocuments();
 
         return NextResponse.json({
             success: true,
-            count: waitlist.length,
+            count: count,
         });
     } catch (error) {
+        console.error('Waitlist count error:', error);
         return NextResponse.json({
-            success: true,
+            success: true, // Fail gracefully for UI
             count: 0,
         });
     }
