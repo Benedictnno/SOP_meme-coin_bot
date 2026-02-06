@@ -1,4 +1,6 @@
 import { MongoClient, Db } from 'mongodb';
+import dns from 'dns'
+dns.setDefaultResultOrder('ipv4first')
 
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
@@ -40,5 +42,7 @@ export default getMongoClient;
 // Helper function to get the database
 export async function getDatabase(): Promise<Db> {
     const client = await getMongoClient();
-    return client.db('sop_scanner'); // Database name
+    const dbName = process.env.MONGODB_DB_NAME;
+    return client.db(dbName); // Uses dbName if provided, otherwise uses the default from URI
 }
+
