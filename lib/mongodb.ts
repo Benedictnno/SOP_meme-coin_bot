@@ -14,8 +14,17 @@ function getMongoClient(): Promise<MongoClient> {
         throw new Error('Please add your MONGODB_URI to .env.local');
     }
 
-    const uri = process.env.MONGODB_URI;
+    let uri = process.env.MONGODB_URI.trim();
+
+    // Remove surrounding quotes if they exist (common issue in some environments)
+    if (uri.startsWith('"') && uri.endsWith('"')) {
+        uri = uri.substring(1, uri.length - 1);
+    } else if (uri.startsWith("'") && uri.endsWith("'")) {
+        uri = uri.substring(1, uri.length - 1);
+    }
+
     const options = {};
+
 
     if (process.env.NODE_ENV === 'development') {
         // In development mode, use a global variable so that the value
