@@ -15,7 +15,11 @@ export interface TokenData {
   priceUSD: string;
   marketCap: number;
   pairAddress?: string;
+  volume1h?: number;
+  volume6h?: number;
   volume24h?: number;
+  volumeTotal?: number;
+  priceChange1h?: number;
   priceChange24h?: number;
   socials?: {
     twitter?: string;
@@ -91,6 +95,15 @@ export interface EnhancedAlert {
     sybilCount: number;
     details: string[];
   };
+  aiAnalysis?: {
+    narrativeScore: number;
+    hypeScore: number;
+    sentiment: 'bullish' | 'neutral' | 'bearish';
+    summary: string;
+    risks: string[];
+    potential: string;
+    mode?: string;
+  };
 }
 
 /**
@@ -107,6 +120,7 @@ export interface BotSettings {
   minCompositeScore?: number;
   minSocialScore?: number;
   whaleOnly?: boolean;
+  aiMode: 'conservative' | 'balanced' | 'aggressive';
 }
 
 /**
@@ -166,12 +180,17 @@ export interface DexPair {
     usd: number;
   };
   volume: {
+    m5: number;
     h1: number;
+    h6: number;
     h24: number;
   };
   priceUsd: string;
   fdv: number;
   priceChange?: {
+    m5: number;
+    h1: number;
+    h6: number;
     h24: number;
   };
   info?: {

@@ -17,7 +17,7 @@ export async function validateContract(mintAddress: string): Promise<RugCheckRes
         'Accept': 'application/json'
       }
     });
-    
+
     if (!response.ok) {
       console.warn(`RugCheck API error: ${response.status} for ${mintAddress}`);
       return {
@@ -26,46 +26,52 @@ export async function validateContract(mintAddress: string): Promise<RugCheckRes
         score: 0
       };
     }
-    
+
     const data = await response.json();
-    
+
     // Extract risks array (RugCheck returns various risk indicators)
     const risks: string[] = [];
-    
+
     if (data.risks && Array.isArray(data.risks)) {
       risks.push(...data.risks.map((r: any) => r.name || r.description || 'Unknown risk'));
     }
-    
+
     // Check for critical flags
     if (data.freezeAuthority) {
       risks.push('Freeze authority enabled');
     }
-    
+
     if (data.mintAuthority) {
       risks.push('Mint authority enabled');
     }
-    
+
     if (data.isLpBurned === false) {
       risks.push('Liquidity not burned');
     }
-    
+
     if (data.isLpLocked === false && data.isLpBurned === false) {
       risks.push('Liquidity not locked or burned');
     }
-    
+
     // Extract top holders if available
     const topHolders = data.topHolders?.map((holder: any) => ({
       address: holder.address,
       percentage: holder.percentage || 0
     })) || [];
-    
+
+    // Normalize score to 0-100 Safety percentage
+    // RugCheck raw score: 0 is good, high is bad (e.g. 5000+ is danger)
+    // We want 100 to be safe, 0 to be dangerous
+    const rawScore = data.score || 0;
+    const safetyScore = Math.max(0, Math.min(100, 100 - (rawScore / 50)));
+
     return {
-      verified: risks.length === 0,
+      verified: data.verified || (risks.length === 0 && rawScore < 1000),
       risks,
-      score: data.score || (risks.length === 0 ? 100 : Math.max(0, 100 - (risks.length * 20))),
+      score: safetyScore,
       topHolders
     };
-    
+
   } catch (error) {
     console.error('RugCheck validation error:', error);
     return {

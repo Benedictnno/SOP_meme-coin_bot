@@ -123,11 +123,15 @@ export async function scanDEXScreener(volumeThreshold: number = 200): Promise<To
         narrative: `Trending on DEX Screener with ${volumeChange.toFixed(0)}% volume increase`,
         liquidity: pair.liquidity?.usd || 0,
         volumeIncrease: volumeChange,
-        topHolderPercent: 0, // Will be filled by validator
+        topHolderPercent: 0,
         priceUSD: pair.priceUsd,
         marketCap: pair.fdv || 0,
         pairAddress: pair.pairAddress,
-        volume24h: pair.volume.h24,
+        volume1h: pair.volume?.h1 || 0,
+        volume6h: pair.volume?.h6 || 0,
+        volume24h: pair.volume?.h24 || 0,
+        volumeTotal: pair.volume?.h24 || 0,
+        priceChange1h: pair.priceChange?.h1 || 0,
         priceChange24h: pair.priceChange?.h24 || 0,
         socials
       };

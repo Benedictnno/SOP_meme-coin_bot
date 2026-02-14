@@ -7,6 +7,7 @@ import { testSellability } from './validators/jupiter';
 import { getHolderDistribution, getWhaleActivity } from './validators/helius';
 import { getTokenCreator, getDeveloperCreditScore } from './validators/dev-score';
 import { detectBundledLaunch } from './validators/bundle-detector';
+import { analyzeTokenNarrative, AIAnalysis } from './validators/gemini';
 
 // Helper for local storage that mimics the expected API
 const simpleStorage = {
@@ -413,6 +414,7 @@ export async function validateTokenEnhanced(
         whaleActivity: { involved: boolean; confidence: number; score: number };
         devScore: { score: number; reputation: string; details: string[] } | null;
         bundleAnalysis: { isBundled: boolean; bundlePercentage: number; sybilCount: number; details: string[] };
+        aiAnalysis: AIAnalysis | null;
     };
 }> {
 
@@ -442,9 +444,10 @@ export async function validateTokenEnhanced(
     ]);
 
     // Secondary checks based on results
-    const [devScore, bundleAnalysis] = await Promise.all([
+    const [devScore, bundleAnalysis, aiAnalysis] = await Promise.all([
         creatorAddress ? getDeveloperCreditScore(creatorAddress) : Promise.resolve(null),
-        detectBundledLaunch(token.mint)
+        detectBundledLaunch(token.mint),
+        analyzeTokenNarrative(token, settings.aiMode)
     ]);
 
     // Narrative & Social scoring (synchronous)
@@ -503,7 +506,8 @@ export async function validateTokenEnhanced(
             socialSignals,
             whaleActivity,
             devScore,
-            bundleAnalysis
+            bundleAnalysis,
+            aiAnalysis: aiAnalysis ? { ...aiAnalysis, mode: settings.aiMode } : null
         }
     };
 }

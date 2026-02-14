@@ -1,20 +1,68 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { scanDEXScreener } from '@/lib/validators/dexscreener';
 import { validateTokenEnhanced } from '@/lib/sop-validator';
 import { BotSettings, EnhancedAlert } from '@/types';
+import { getUserById, hasActiveSubscription } from '@/lib/users';
 
 export async function POST(request: Request) {
   try {
-    const settings: BotSettings = await request.json();
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Please sign in.' },
+        { status: 401 }
+      );
+    }
+
+    const userId = (session.user as any).id;
+    const user = await getUserById(userId);
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not found.' },
+        { status: 404 }
+      );
+    }
+
+    // Check Subscription / Free Trial
+    const isSubscribed = await hasActiveSubscription(user);
+    if (!isSubscribed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Subscription expired',
+          message: 'Your 21-day free trial has expired. Please subscribe with SOL to continue.'
+        },
+        { status: 403 }
+      );
+    }
+
+    // Use user-specific settings if available, otherwise fallback to defaults or request body
+    const bodySettings = await request.json().catch(() => ({}));
+    const settings: BotSettings = user.settings ? {
+      ...user.settings,
+      // Merge with any temporary overrides from the dashboard if provided
+      ...bodySettings
+    } : {
+      minLiquidity: 50000,
+      maxTopHolderPercent: 10,
+      minVolumeIncrease: 200,
+      scanInterval: 60,
+      enableTelegramAlerts: false,
+      minCompositeScore: 50,
+      minSocialScore: 30,
+      whaleOnly: false,
+      aiMode: 'balanced',
+      ...bodySettings
+    };
 
     // 1. Discover Tokens via DEX Screener
-    console.log(`Starting scan with Volume Spike Target: ${settings.minVolumeIncrease}%`);
+    console.log(`Starting scan for ${user.email} (Target: ${settings.minVolumeIncrease}%)`);
     const discoveredTokens = await scanDEXScreener(settings.minVolumeIncrease);
-    console.log(`Discovered ${discoveredTokens.length} potential tokens from DEX Screener`);
-
-    if (discoveredTokens.length === 0) {
-      console.warn('SCAN FAILED: Discovery returned zero tokens. Check DEX Screener filters or volume spike setting.');
-    }
+    console.log(`Discovered ${discoveredTokens.length} potential tokens`);
 
     const alerts: EnhancedAlert[] = [];
     let scannedCount = 0;
@@ -25,64 +73,47 @@ export async function POST(request: Request) {
       scannedCount++;
 
       try {
-        console.log(`Validating token [${scannedCount}/${discoveredTokens.length}]: ${token.symbol}`);
-
         // Run the enhanced SOP validation
         const validationResult = await validateTokenEnhanced(token, settings);
 
-        // Calculate composite score based on validation results
+        // Calculate composite score
         const baseScore = validationResult.rugCheckScore * 0.4;
         const narrativeScore = validationResult.enhancements.narrativeQuality.score * 0.2;
         const socialScore = validationResult.enhancements.socialSignals.overallScore;
         const whaleScore = validationResult.enhancements.whaleActivity.score;
         const liquidityScore = validationResult.enhancements.liquidityStability.isStable ? 100 : 0;
 
-        // Weights
-        let compositeScore = baseScore +
-          narrativeScore +
-          (socialScore * 0.15) +
-          (whaleScore * 0.05) +
-          (liquidityScore * 0.2);
+        let compositeScore = baseScore + narrativeScore + (socialScore * 0.15) + (whaleScore * 0.05) + (liquidityScore * 0.2);
 
         // Penalties
         if (!validationResult.enhancements.freshness.isFresh) compositeScore -= 10;
         if (!validationResult.enhancements.txPatterns.isOrganic) compositeScore -= 20;
         if (!validationResult.enhancements.marketContext.isRiskOn) compositeScore -= 10;
-
-        // Deep Security Penalties
         if (validationResult.enhancements.bundleAnalysis.isBundled) compositeScore -= 30;
         if (validationResult.enhancements.devScore && validationResult.enhancements.devScore.score < 20) compositeScore -= 20;
 
         compositeScore = Math.max(0, Math.min(100, Math.round(compositeScore)));
 
-        const isValid = validationResult.checks.narrative &&
-          validationResult.checks.liquidity &&
-          validationResult.checks.contract &&
-          validationResult.checks.sellTest;
+        const isValid = validationResult.checks.narrative && validationResult.checks.liquidity && validationResult.checks.contract && validationResult.checks.sellTest;
 
-
-
-        // Create the alert object
+        // Recommendations
         const recommendations = [];
-        if (compositeScore >= 80) recommendations.push('🟢 STRONG BUY - All signals aligned');
+        if (compositeScore >= 80) recommendations.push('🟢 STRONG BUY - All signals Aligned');
         else if (compositeScore >= 70) recommendations.push('🟢 BUY - High confidence setup');
         else if (compositeScore >= 60) recommendations.push('🟡 MODERATE - Exercise caution');
         else recommendations.push('🔴 AVOID - High risk');
 
-        if (validationResult.enhancements.txPatterns.suspiciousPatterns.length > 0) {
-          recommendations.push('⚠️ Suspicious Patterns Detected');
-        }
+        if (validationResult.enhancements.txPatterns.suspiciousPatterns.length > 0) recommendations.push('⚠️ Suspicious Patterns Detected');
+        if (validationResult.enhancements.whaleActivity.involved) recommendations.push('🐋 Whale Wallets Involved');
+        if (validationResult.enhancements.bundleAnalysis.isBundled) recommendations.push('⛔ BUNDLED LAUNCH - Avoid');
+        if (validationResult.enhancements.devScore && validationResult.enhancements.devScore.reputation === 'High') recommendations.push('⭐ Trusted Developer History');
 
-        if (validationResult.enhancements.whaleActivity.involved) {
-          recommendations.push('🐋 Whale Wallets Involved');
-        }
-
-        if (validationResult.enhancements.bundleAnalysis.isBundled) {
-          recommendations.push('⛔ BUNDLED LAUNCH - Avoid');
-        }
-
-        if (validationResult.enhancements.devScore && validationResult.enhancements.devScore.reputation === 'High') {
-          recommendations.push('⭐ Trusted Developer History');
+        // AI analysis integration
+        if (validationResult.enhancements.aiAnalysis) {
+          recommendations.push(`🤖 AI: ${validationResult.enhancements.aiAnalysis.summary}`);
+          if (validationResult.enhancements.aiAnalysis.potential === 'moonshot') {
+            recommendations.push('🚀 AI High Potential Detected');
+          }
         }
 
         const alert: EnhancedAlert = {
@@ -102,31 +133,52 @@ export async function POST(request: Request) {
           recommendations,
           risks: validationResult.risks,
           devScore: validationResult.enhancements.devScore || undefined,
-          bundleAnalysis: validationResult.enhancements.bundleAnalysis
+          bundleAnalysis: validationResult.enhancements.bundleAnalysis,
+          aiAnalysis: validationResult.enhancements.aiAnalysis ? { ...validationResult.enhancements.aiAnalysis, mode: settings.aiMode } : undefined
         };
 
-        // 3. Filter based on Settings
-        const minScore = settings.minCompositeScore ?? 0;
-        const minSocial = settings.minSocialScore ?? 0;
-        const whaleRequired = settings.whaleOnly ?? false;
-
-        const passesScore = compositeScore >= minScore;
-        const passesSocial = alert.socialSignals.overallScore >= minSocial;
-        const passesWhale = !whaleRequired || alert.whaleActivity.involved;
-
-        if (passesScore && passesSocial && passesWhale) {
-          alerts.push(alert);
-          if (isValid) validCount++;
+        if (alert.aiAnalysis) {
+          console.log(`[AI Analysis Generated] for ${token.symbol}: ${alert.aiAnalysis.summary.substring(0, 50)}...`);
         } else {
-          console.log(`Token ${token.symbol} filtered: Score ${compositeScore}/${minScore}, Social ${alert.socialSignals.overallScore}/${minSocial}, Whale ${alert.whaleActivity.involved}/${whaleRequired}`);
+          console.log(`[AI Analysis Missing] for ${token.symbol}`);
+        }
+
+        // Filter and Deduplicate
+        const passesWhaleFilter = !settings.whaleOnly || validationResult.enhancements.whaleActivity.involved;
+
+        if (compositeScore >= (settings.minCompositeScore || 0) && passesWhaleFilter) {
+          // User-specific deduplication
+          const { getDatabase } = await import('@/lib/mongodb');
+          const db = await getDatabase();
+          const lastSent = await db.collection('sent_alerts').findOne({
+            userId: userId,
+            mint: token.mint,
+            timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+          });
+
+          if (!lastSent) {
+            alerts.push(alert);
+            if (isValid) validCount++;
+
+            // Send Telegram if enabled FOR THIS USER
+            if (settings.enableTelegramAlerts && user.telegramChatId) {
+              // We need to use the user's specific chat ID if it exists
+              const { sendTelegramAlert } = await import('@/lib/telegram');
+              await sendTelegramAlert(alert, user.telegramChatId);
+
+              await db.collection('sent_alerts').insertOne({
+                userId: userId,
+                mint: token.mint,
+                symbol: token.symbol,
+                timestamp: new Date().toISOString()
+              });
+            }
+          }
         }
       } catch (tokenError) {
         console.error(`Error validating token ${token.symbol}:`, tokenError);
-        // Continue to next token
       }
     }
-
-    console.log(`Scan complete. Scanned: ${scannedCount}, Valid: ${validCount}, Alerts: ${alerts.length}`);
 
     return NextResponse.json({
       success: true,
@@ -137,9 +189,6 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Scan API Error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal Server Error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

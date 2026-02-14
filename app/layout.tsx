@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Analytics } from "@vercel/analytics/next"
 import './globals.css';
+import { Providers } from '@/components/providers';
 
 export const metadata: Metadata = {
   title: 'SOP Scanner | Master the Trench',
@@ -21,8 +22,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
       </head>
       <body className="antialiased">
-       <Analytics/>
-        {children}
+        <Analytics />
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

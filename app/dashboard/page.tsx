@@ -1,9 +1,9 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { TokenData, EnhancedAlert, BotSettings, ValidationChecks } from '@/types';
-import { Bell, Play, Pause, Settings, Download, X, TrendingUp, Activity, CheckCircle, XCircle, DollarSign, Users, Zap, ExternalLink, RefreshCw, BarChart3, PieChart, Clock, Target, Shield, Twitter, AlertTriangle, ChevronRight, Star } from 'lucide-react';
-
-// Local interfaces removed in favor of shared types
+import { Bell, Play, Pause, Settings, Download, X, TrendingUp, Activity, CheckCircle, XCircle, DollarSign, Users, Zap, ExternalLink, RefreshCw, BarChart3, PieChart, Clock, Target, Shield, Twitter, AlertTriangle, ChevronRight, Star, Save, Loader2 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
 interface PerformanceMetrics {
   totalAlerts: number;
@@ -15,17 +15,10 @@ interface PerformanceMetrics {
   whaleSuccessRate: number;
 }
 
-const validationChecks = [
-  { id: 'narrative', label: 'Narrative', icon: TrendingUp },
-  { id: 'attention', label: 'Attention', icon: Activity },
-  { id: 'liquidity', label: 'Liquidity', icon: DollarSign },
-  { id: 'volume', label: 'Volume', icon: Users },
-  { id: 'contract', label: 'Contract', icon: CheckCircle },
-  { id: 'holders', label: 'Holders', icon: Users },
-  { id: 'sellTest', label: 'Sell Test', icon: Zap }
-];
-
 export default function EnhancedAnalyticsDashboard() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
   const [isRunning, setIsRunning] = useState(false);
   const [alerts, setAlerts] = useState<EnhancedAlert[]>([]);
   const [scannedTokens, setScannedTokens] = useState(0);
@@ -35,6 +28,10 @@ export default function EnhancedAnalyticsDashboard() {
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<EnhancedAlert | null>(null);
   const [activeView, setActiveView] = useState<'alerts' | 'analytics' | 'patterns'>('alerts');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<{ expiry: string | null; trialDaysLeft: number }>({ expiry: null, trialDaysLeft: 0 });
+  const [telegramChatId, setTelegramChatId] = useState('');
 
   const [settings, setSettings] = useState<BotSettings>({
     minLiquidity: 50000,
@@ -44,7 +41,8 @@ export default function EnhancedAnalyticsDashboard() {
     enableTelegramAlerts: false,
     minCompositeScore: 50,
     minSocialScore: 30,
-    whaleOnly: false
+    whaleOnly: false,
+    aiMode: 'balanced'
   });
 
   const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics>({
@@ -57,26 +55,52 @@ export default function EnhancedAnalyticsDashboard() {
     whaleSuccessRate: 0
   });
 
-  // Load from storage
+  // Redirect if not authenticated
   useEffect(() => {
-    const loadData = async () => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router]);
+
+  // Load from API
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (status !== 'authenticated') return;
+
       try {
+        const res = await fetch('/api/user/settings');
+        const data = await res.json();
+        if (data.success) {
+          if (data.settings) setSettings(data.settings);
+          if (data.telegramChatId) setTelegramChatId(data.telegramChatId);
+
+          // Calculate trial
+          const createdAt = new Date(data.createdAt);
+          const trialExpiry = new Date(createdAt.getTime() + 21 * 24 * 60 * 60 * 1000);
+          const trialDaysLeft = Math.max(0, Math.ceil((trialExpiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+          setSubscriptionInfo({
+            expiry: data.subscriptionExpiresAt || null,
+            trialDaysLeft
+          });
+        }
+
         const stored = window.localStorage.getItem('enhanced-alerts');
         if (stored) {
-          const data = JSON.parse(stored);
-          setAlerts(data.alerts || []);
-          setScannedTokens(data.scannedTokens || 0);
-          setValidatedTokens(data.validatedTokens || 0);
-          calculateMetrics(data.alerts || []);
+          const localData = JSON.parse(stored);
+          setAlerts(localData.alerts || []);
+          setScannedTokens(localData.scannedTokens || 0);
+          setValidatedTokens(localData.validatedTokens || 0);
+          calculateMetrics(localData.alerts || []);
         }
       } catch (err) {
-        console.log('No stored data');
+        console.error('Failed to load user data:', err);
       }
     };
-    loadData();
-  }, []);
+    loadUserData();
+  }, [status]);
 
-  // Save to storage
+  // Save alerts to local storage
   useEffect(() => {
     if (alerts.length > 0) {
       window.localStorage.setItem('enhanced-alerts', JSON.stringify({
@@ -87,6 +111,29 @@ export default function EnhancedAnalyticsDashboard() {
       calculateMetrics(alerts);
     }
   }, [alerts, scannedTokens, validatedTokens]);
+
+  const onSaveSettings = async (targetSettings = settings) => {
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      const res = await fetch('/api/user/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: targetSettings,
+          telegramChatId
+        }),
+      });
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const calculateMetrics = (alertList: EnhancedAlert[]) => {
     if (alertList.length === 0) return;
@@ -103,7 +150,6 @@ export default function EnhancedAnalyticsDashboard() {
       whaleSuccessRate: 0
     };
 
-    // Calculate best/worst hours
     const hourlyScores: { [key: number]: number[] } = {};
     alertList.forEach(alert => {
       const hour = new Date(alert.timestamp).getHours();
@@ -125,7 +171,6 @@ export default function EnhancedAnalyticsDashboard() {
       }
     });
 
-    // Whale success rate
     const whaleAlerts = alertList.filter(a => a.whaleActivity.involved);
     if (whaleAlerts.length > 0) {
       const whaleHighScore = whaleAlerts.filter(a => a.compositeScore >= 70).length;
@@ -136,34 +181,27 @@ export default function EnhancedAnalyticsDashboard() {
   };
 
   const runScan = async () => {
+    if (isScanning) return;
     setIsScanning(true);
 
     try {
       const response = await fetch('/api/scan', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        console.log(`Scan successful: Found ${data.alerts.length} alerts`, data);
         setScannedTokens(prev => prev + data.scanned);
         setValidatedTokens(prev => prev + data.valid);
 
         setAlerts(prev => {
-          // Create a Map from the previous alerts for quick lookup by mint
           const alertMap = new Map(prev.map(a => [a.token.mint, a]));
-
-          // Add/Update with new alerts
           data.alerts.forEach((newAlert: EnhancedAlert) => {
             alertMap.set(newAlert.token.mint, newAlert);
           });
-
-          // Convert back to array and sort by composite score (highest first)
           return Array.from(alertMap.values())
             .sort((a, b) => b.compositeScore - a.compositeScore)
             .slice(0, 100);
@@ -171,7 +209,11 @@ export default function EnhancedAnalyticsDashboard() {
 
         setLastScanTime(new Date());
       } else {
-        console.error('Scan API returned failure:', data.error);
+        if (data.error === 'Subscription expired') {
+          setIsRunning(false);
+          alert(data.message);
+        }
+        console.error('Scan API error:', data.error);
       }
     } catch (error) {
       console.error('Failed to run scan:', error);
@@ -183,7 +225,7 @@ export default function EnhancedAnalyticsDashboard() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) {
-      runScan(); // Run immediately on start
+      runScan();
       interval = setInterval(runScan, settings.scanInterval * 1000);
     }
     return () => {
@@ -191,371 +233,248 @@ export default function EnhancedAnalyticsDashboard() {
     };
   }, [isRunning, settings.scanInterval]);
 
-  // Score visual helper is now replaced by direct color classes in components
-
-  const exportAlerts = () => {
-    const csv = [
-      ['Timestamp', 'Symbol', 'Composite Score', 'Valid', 'Liquidity', 'Volume %', 'Social Score', 'Whale', 'Setup'],
-      ...alerts.map(a => [
-        new Date(a.timestamp).toLocaleString(),
-        a.token.symbol,
-        a.compositeScore,
-        a.isValid ? 'Yes' : 'No',
-        a.token.liquidity,
-        a.token.volumeIncrease,
-        a.socialSignals.overallScore,
-        a.whaleActivity.involved ? 'Yes' : 'No',
-        a.setupType
-      ])
-    ].map(row => row.join(',')).join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `enhanced-alerts-${Date.now()}.csv`;
-    a.click();
+  const onTestTelegram = async () => {
+    try {
+      const res = await fetch('/api/test-telegram', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) alert('Test alert sent to your Telegram!');
+      else alert('Failed to send test alert. Check your Bot Token and Chat ID.');
+    } catch (err) {
+      alert('Error connecting to Telegram API.');
+    }
   };
 
-  const scoreDistribution = alerts.reduce((acc, alert) => {
-    const bucket = Math.floor(alert.compositeScore / 10) * 10;
-    acc[bucket] = (acc[bucket] || 0) + 1;
-    return acc;
-  }, {} as { [key: number]: number });
-
-  const hourlyDistribution = alerts.reduce((acc, alert) => {
-    const hour = new Date(alert.timestamp).getHours();
-    if (!acc[hour]) acc[hour] = { count: 0, totalScore: 0 };
-    acc[hour].count++;
-    acc[hour].totalScore += alert.compositeScore;
-    return acc;
-  }, {} as { [key: number]: { count: number; totalScore: number } });
-
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-200">
-      {/* Header */}
-      <div className="border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 border border-neutral-700 bg-neutral-800 rounded flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-accent" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold tracking-tight">MemeScanner Terminal</h1>
-                <p className="text-xs text-neutral-500 font-medium uppercase tracking-wider">On-Chain Analytics • Live</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="flex bg-neutral-800 p-1 rounded-md border border-neutral-700 mr-2">
-                <button
-                  onClick={() => setActiveView('alerts')}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold transition ${activeView === 'alerts'
-                    ? 'bg-neutral-700 text-white shadow-sm'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                    }`}
-                >
-                  Feed
-                </button>
-                <button
-                  onClick={() => setActiveView('analytics')}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold transition ${activeView === 'analytics'
-                    ? 'bg-neutral-700 text-white shadow-sm'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                    }`}
-                >
-                  Analytics
-                </button>
-                <button
-                  onClick={() => setActiveView('patterns')}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold transition ${activeView === 'patterns'
-                    ? 'bg-neutral-700 text-white shadow-sm'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                    }`}
-                >
-                  Historical
-                </button>
-              </div>
-
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="p-2 border border-neutral-700 hover:bg-neutral-800 rounded transition text-neutral-400"
-                title="Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              <button
-                onClick={exportAlerts}
-                disabled={alerts.length === 0}
-                className="p-2 border border-neutral-700 hover:bg-neutral-800 disabled:opacity-30 rounded transition text-neutral-400"
-                title="Export Data"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsRunning(!isRunning)}
-                className={`ml-1 px-4 py-2 rounded font-semibold transition text-xs flex items-center gap-2 ${isRunning
-                  ? 'bg-neutral-800 border border-red-900/50 text-red-400 hover:bg-red-900/10'
-                  : 'bg-accent text-white hover:bg-accent/90'
-                  }`}
-              >
-                {isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                {isRunning ? 'Stop Scan' : 'Start Feed'}
-              </button>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-purple-500/30">
+      {/* Dynamic Background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-purple-900/10 blur-[120px] rounded-full animate-pulse" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-blue-900/10 blur-[100px] rounded-full" />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="relative z-10 max-w-[1600px] mx-auto px-6 py-8">
+        {/* Header */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20">
+              <Zap className="w-6 h-6 text-white fill-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none mb-1">MemeScanner <span className="text-purple-500">v3.0</span></h1>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">Neural Intelligence Terminal</span>
+                {lastScanTime && (
+                  <span className="text-[10px] text-neutral-700 font-bold uppercase tracking-widest flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Sync: {lastScanTime.toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={() => setIsRunning(!isRunning)} className={`px-8 py-3 rounded-full flex items-center gap-3 transition-all font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl ${isRunning ? 'bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20' : 'bg-purple-600 text-white hover:bg-purple-500 shadow-purple-600/20'}`}>
+              {isRunning ? <><Pause className="w-4 h-4 fill-current" /> Terminate Node</> : <><Play className="w-4 h-4 fill-current" /> Initialize Node</>}
+            </button>
+            <button onClick={() => setShowSettings(!showSettings)} className="w-12 h-12 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600 transition-all">
+              <Settings className={`w-5 h-5 ${showSettings ? 'rotate-90 text-purple-500' : ''} transition-all`} />
+            </button>
+            <button onClick={() => { window.localStorage.removeItem('enhanced-alerts'); setAlerts([]); }} className="w-12 h-12 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-red-500 transition-all">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-8 mb-8 border-b border-neutral-800/50">
+          {[
+            { id: 'alerts', label: 'Signal Feed', icon: Activity },
+            { id: 'analytics', label: 'Neural Insights', icon: BarChart3 },
+            { id: 'patterns', label: 'Network Cycles', icon: RefreshCw }
+          ].map(view => (
+            <button key={view.id} onClick={() => setActiveView(view.id as any)} className={`pb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] transition-all relative ${activeView === view.id ? 'text-purple-500' : 'text-neutral-600 hover:text-neutral-400'}`}>
+              <view.icon className="w-4 h-4" />
+              {view.label}
+              {activeView === view.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]" />}
+            </button>
+          ))}
+        </div>
+
         {showSettings && (
           <SettingsPanel
             settings={settings}
             setSettings={setSettings}
-            onClose={() => setShowSettings(false)}
+            telegramChatId={telegramChatId}
+            setTelegramChatId={setTelegramChatId}
+            onSaveSettings={onSaveSettings}
+            isSaving={isSaving}
+            saveSuccess={saveSuccess}
+            onTestTelegram={onTestTelegram}
+            subscriptionInfo={subscriptionInfo}
           />
         )}
-        {/* Performance Metrics Bar */}
+
+        {/* Metrics Bar */}
         <div className="grid grid-cols-2 lg:grid-cols-6 border border-neutral-800 rounded bg-neutral-900/30 mb-8 divide-x divide-neutral-800 overflow-hidden">
           <div className="p-4">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">System Status</div>
+            <div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Status</div>
             <div className="flex items-center gap-2">
               <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-neutral-600'}`} />
-              <span className="text-xs font-semibold uppercase tracking-tight">{isRunning ? 'Connected' : 'Offline'}</span>
+              <span className="text-xs font-semibold uppercase tracking-tight">{isRunning ? 'Active' : 'Standby'}</span>
             </div>
           </div>
-
-          <div className="p-4">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Assets Scanned</div>
-            <div className="text-lg font-semibold text-neutral-200 tabular-nums">{scannedTokens.toLocaleString()}</div>
-          </div>
-
-          <div className="p-4">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Qualified</div>
-            <div className="text-lg font-semibold text-neutral-200 tabular-nums">{validatedTokens.toLocaleString()}</div>
-          </div>
-
-          <div className="p-4">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Avg Score</div>
-            <div className={`text-lg font-semibold tabular-nums ${performanceMetrics.avgCompositeScore >= 70 ? 'text-green-500' : 'text-neutral-200'}`}>
-              {performanceMetrics.avgCompositeScore}
-            </div>
-          </div>
-
-          <div className="p-4">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">High Signal</div>
-            <div className="text-lg font-semibold text-neutral-200 tabular-nums">{performanceMetrics.highScoreAlerts}</div>
-          </div>
-
-          <div className="p-4">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Peak Hour</div>
-            <div className="text-lg font-semibold text-neutral-200 tabular-nums">{performanceMetrics.bestHour.toString().padStart(2, '0')}:00</div>
-          </div>
+          <div className="p-4"><div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Assets Scanned</div><div className="text-lg font-semibold text-neutral-200 tabular-nums">{scannedTokens.toLocaleString()}</div></div>
+          <div className="p-4"><div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Qualified</div><div className="text-lg font-semibold text-neutral-200 tabular-nums">{validatedTokens.toLocaleString()}</div></div>
+          <div className="p-4"><div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Avg Score</div><div className={`text-lg font-semibold tabular-nums ${performanceMetrics.avgCompositeScore >= 70 ? 'text-green-500' : 'text-neutral-200'}`}>{performanceMetrics.avgCompositeScore}</div></div>
+          <div className="p-4"><div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">High Signal</div><div className="text-lg font-semibold text-neutral-200 tabular-nums">{performanceMetrics.highScoreAlerts}</div></div>
+          <div className="p-4"><div className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold mb-1">Peak Hour</div><div className="text-lg font-semibold text-neutral-200 tabular-nums">{performanceMetrics.bestHour.toString().padStart(2, '0')}:00</div></div>
         </div>
 
         {isScanning && (
-          <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 mb-6">
+          <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 mb-6 animate-pulse">
             <div className="flex items-center gap-3">
               <RefreshCw className="w-5 h-5 animate-spin text-purple-400" />
               <div className="flex-1">
-                <div className="font-semibold">Enhanced Scanning in Progress...</div>
-                <div className="text-sm text-slate-400">Running full validation with composite scoring</div>
+                <div className="font-semibold text-purple-100 italic">Deep Analysis Engine Active...</div>
+                <div className="text-xs text-purple-400 font-bold uppercase tracking-widest">Validating Narrative & Security</div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Main Content Area */}
-        {activeView === 'alerts' && (
-          <AlertsView
-            alerts={alerts}
-            selectedAlert={selectedAlert}
-            setSelectedAlert={setSelectedAlert}
-          />
-        )}
-
-        {activeView === 'analytics' && (
-          <AnalyticsView
-            alerts={alerts}
-            performanceMetrics={performanceMetrics}
-            scoreDistribution={scoreDistribution}
-          />
-        )}
-
-        {activeView === 'patterns' && (
-          <PatternsView
-            hourlyDistribution={hourlyDistribution}
-            performanceMetrics={performanceMetrics}
-          />
-        )}
+        {/* View Selection */}
+        {activeView === 'alerts' && <AlertsView alerts={alerts} selectedAlert={selectedAlert} setSelectedAlert={setSelectedAlert} />}
+        {activeView === 'analytics' && <AnalyticsView alerts={alerts} performanceMetrics={performanceMetrics} scoreDistribution={{}} />}
+        {activeView === 'patterns' && <PatternsView hourlyDistribution={{}} performanceMetrics={performanceMetrics} />}
       </div>
     </div>
   );
 }
 
-// Alerts View Component
 const AlertsView = ({ alerts, selectedAlert, setSelectedAlert }: any) => (
   <div className="border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
     <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-900/50">
       <div className="flex items-center gap-2">
-        <h2 className="text-sm font-bold tracking-tight uppercase">Live Feed</h2>
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+        <h2 className="text-sm font-bold tracking-tight uppercase">Terminal Feed</h2>
+        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
       </div>
-      <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{alerts.length} signals found</div>
+      <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{alerts.length} signals identified</div>
     </div>
 
     {alerts.length === 0 ? (
-      <div className="text-center py-24 flex flex-col items-center">
-        <div className="w-12 h-12 border border-neutral-800 rounded flex items-center justify-center mb-4 text-neutral-700">
-          <Bell className="w-6 h-6" />
-        </div>
-        <p className="text-sm text-neutral-500 font-medium tracking-tight">System initialized. Waiting for on-chain events...</p>
+      <div className="text-center py-32 flex flex-col items-center">
+        <div className="w-12 h-12 border border-neutral-800 rounded flex items-center justify-center mb-4 text-neutral-800"><Bell className="w-6 h-6" /></div>
+        <p className="text-xs text-neutral-600 font-bold uppercase tracking-[0.2em]">Inert state. Awaiting market volatility.</p>
       </div>
     ) : (
-      <div className="divide-y divide-neutral-800/50 max-h-[800px] overflow-y-auto">
+      <div className="divide-y divide-neutral-800/50 max-h-[800px] overflow-y-auto custom-scrollbar">
         {alerts.map((alert: EnhancedAlert) => {
           const isSelected = selectedAlert?.id === alert.id;
           return (
-            <div key={alert.id} className="group transition-colors">
-              <div
-                onClick={() => setSelectedAlert(isSelected ? null : alert)}
-                className={`px-6 py-4 flex items-center gap-6 cursor-pointer hover:bg-neutral-800/30 ${isSelected ? 'bg-neutral-800/50' : ''}`}
-              >
+            <div key={alert.id} className="group border-l-2 border-transparent hover:border-purple-500 transition-all">
+              <div onClick={() => setSelectedAlert(isSelected ? null : alert)} className={`px-6 py-5 flex items-center gap-6 cursor-pointer hover:bg-neutral-900/50 ${isSelected ? 'bg-neutral-900' : ''}`}>
                 <div className="w-12 flex flex-col items-center">
-                  <span className={`text-lg font-bold tabular-nums tracking-tighter ${alert.compositeScore >= 80 ? 'text-green-400' :
-                    alert.compositeScore >= 60 ? 'text-blue-400' : 'text-neutral-400'
-                    }`}>
-                    {alert.compositeScore}
-                  </span>
-                  <span className="text-[9px] uppercase tracking-widest text-neutral-600 font-bold">Score</span>
+                  <span className={`text-xl font-bold tracking-tighter tabular-nums ${alert.compositeScore >= 80 ? 'text-green-400' : alert.compositeScore >= 60 ? 'text-purple-400' : 'text-neutral-500'}`}>{alert.compositeScore}</span>
+                  <span className="text-[8px] uppercase tracking-[0.3em] text-neutral-700 font-black">Score</span>
                 </div>
-
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1">
-                    <h3 className="text-sm font-bold text-neutral-200 tracking-tight">{alert.token.symbol}</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 border border-neutral-700 text-neutral-400 rounded uppercase font-bold tracking-wider">
-                      {alert.setupType}
-                    </span>
-                    {alert.whaleActivity.involved && (
-                      <span className="flex items-center gap-1 text-[10px] text-blue-400 font-bold uppercase tracking-wider">
-                        <span className="w-1 h-1 rounded-full bg-blue-400" />
-                        Whale
-                      </span>
-                    )}
-                    {alert.bundleAnalysis?.isBundled && (
-                      <span className="flex items-center gap-1 text-[10px] text-red-500 font-bold uppercase tracking-wider">
-                        <span className="w-1 h-1 rounded-full bg-red-500" />
-                        Bundled
-                      </span>
-                    )}
-                    {alert.devScore && alert.devScore.reputation === 'High' && (
-                      <span className="flex items-center gap-1 text-[10px] text-green-500 font-bold uppercase tracking-wider">
-                        <Star className="w-2.5 h-2.5" />
-                        Elite Dev
-                      </span>
-                    )}
+                    <h3 className="text-sm font-bold text-neutral-100 tracking-tight">{alert.token.symbol}</h3>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-neutral-800 border border-neutral-700 text-neutral-500 rounded uppercase font-black tracking-widest">{alert.setupType}</span>
+                    {alert.whaleActivity.involved && <span className="flex items-center gap-1 text-[9px] text-purple-400 font-black uppercase tracking-widest">Whale Activity</span>}
                   </div>
-                  <div className="flex items-center gap-4">
-                    <p className="text-[11px] text-neutral-500 font-medium tabular-nums">
-                      {new Date(alert.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </p>
-                    <p className="text-[11px] text-neutral-600 font-mono truncate max-w-[120px]">
-                      {alert.token.mint}
-                    </p>
+                  <div className="flex items-center gap-4 text-[10px] text-neutral-600 font-bold uppercase tracking-widest">
+                    <span>{new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                    <span className="font-mono lowercase opacity-50">{alert.token.mint.slice(0, 12)}...</span>
                   </div>
                 </div>
-
-                <div className="hidden md:grid grid-cols-2 gap-x-8 gap-y-1 text-right whitespace-nowrap">
-                  <div>
-                    <span className="text-[10px] text-neutral-600 font-bold uppercase mr-2">Liq</span>
-                    <span className="text-xs text-neutral-400 font-medium tabular-nums">${(alert.token.liquidity / 1000).toFixed(1)}k</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-neutral-600 font-bold uppercase mr-2">Vol Δ</span>
-                    <span className="text-xs text-green-500/80 font-medium tabular-nums">+{alert.token.volumeIncrease.toFixed(0)}%</span>
-                  </div>
+                <div className="hidden md:flex flex-col items-end gap-1">
+                  <div className="text-[10px] font-bold text-neutral-400 tabular-nums">${(alert.token.liquidity / 1000).toFixed(1)}K <span className="text-neutral-600">LIQ</span></div>
+                  <div className="text-[10px] font-bold text-green-500 tabular-nums">+{alert.token.volumeIncrease.toFixed(0)}% <span className="text-neutral-600 lowercase">spike</span></div>
                 </div>
-
-                <div className="w-8 flex justify-end">
-                  <ChevronRight className={`w-4 h-4 text-neutral-700 transition-transform ${isSelected ? 'rotate-90' : ''}`} />
-                </div>
+                <ChevronRight className={`w-4 h-4 text-neutral-800 transition-all ${isSelected ? 'rotate-90 text-purple-500' : ''}`} />
               </div>
 
               {isSelected && (
-                <div className="px-6 pb-6 pt-2 bg-neutral-900/50 border-t border-neutral-800/30">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-8 py-4">
+                <div className="px-8 pb-8 pt-4 bg-neutral-950/50 border-t border-neutral-900 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-12 text-neutral-400">
                     <div className="space-y-4">
-                      <h4 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest border-b border-neutral-800 pb-1">Validation Analysis</h4>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-neutral-400">Security Score</span>
-                          <span className="text-xs font-bold text-neutral-300">{alert.rugCheckScore}/100</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-neutral-400">Social Momentum</span>
-                          <span className="text-xs font-bold text-neutral-300">{alert.socialSignals.overallScore}/100</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-neutral-400">Whale Confidence</span>
-                          <span className="text-xs font-bold text-neutral-300">{Math.round(alert.whaleActivity.confidence * 100)}%</span>
-                        </div>
+                      <h4 className="text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2">Analysis Vectors</h4>
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-[11px]"><span className="text-neutral-500">Contract Safety</span><span className="font-bold text-neutral-300 tabular-nums">{alert.rugCheckScore}</span></div>
+                        <div className="flex justify-between text-[11px]"><span className="text-neutral-500">Social Strength</span><span className="font-bold text-neutral-300 tabular-nums">{alert.socialSignals.overallScore}</span></div>
+                        <div className="flex justify-between text-[11px]"><span className="text-neutral-500">Whale Conviction</span><span className="font-bold text-purple-400 tabular-nums">{Math.round(alert.whaleActivity.confidence * 100)}%</span></div>
                       </div>
                     </div>
-
-                    <div className="space-y-4">
-                      <h4 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest border-b border-neutral-800 pb-1">Trench Safety</h4>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-neutral-400">Dev Reputation</span>
-                          <span className={`text-xs font-bold ${alert.devScore?.reputation === 'High' ? 'text-green-400' : alert.devScore?.reputation === 'Low' ? 'text-red-400' : 'text-neutral-400'}`}>
-                            {alert.devScore?.reputation || 'New'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-neutral-400">Bundle Status</span>
-                          <span className={`text-xs font-bold ${alert.bundleAnalysis?.isBundled ? 'text-red-400' : 'text-green-400'}`}>
-                            {alert.bundleAnalysis?.isBundled ? 'Flagged' : 'Clean'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-neutral-400">Sybil Count</span>
-                          <span className={`text-xs font-bold ${alert.bundleAnalysis?.sybilCount && alert.bundleAnalysis.sybilCount > 2 ? 'text-yellow-400' : 'text-neutral-400'}`}>
-                            {alert.bundleAnalysis?.sybilCount || 0}
-                          </span>
+                    <div className="md:col-span-2 space-y-6">
+                      <div className="space-y-4">
+                        <h4 className="text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2">Intelligence Brief</h4>
+                        <div className="space-y-3">
+                          {alert.recommendations.map((rec: string, i: number) => (
+                            <div key={i} className="flex gap-2 text-[11px] text-neutral-300 font-medium leading-relaxed">
+                              <span className="text-purple-500 mt-0.5">•</span>
+                              <span>{rec}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-4">
-                      <h4 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest border-b border-neutral-800 pb-1">Action items</h4>
-                      <div className="space-y-2">
-                        {alert.recommendations.map((rec, i) => (
-                          <div key={i} className="flex gap-2 text-xs text-neutral-300 items-start">
-                            <span className="text-neutral-600 mt-0.5">•</span>
-                            <span>{rec}</span>
+                      {alert.aiAnalysis && (
+                        <div className="p-5 border border-purple-500/20 bg-purple-500/5 rounded-xl space-y-4 animate-in fade-in zoom-in-95 duration-500">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Zap className="w-3.5 h-3.5 text-purple-400" />
+                              <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">AI Agent Analysis</span>
+                            </div>
+                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-[9px] font-black uppercase rounded tabular-nums">{alert.aiAnalysis.potential} potential</span>
                           </div>
-                        ))}
+
+                          <p className="text-[12px] text-purple-100 italic leading-relaxed">"{alert.aiAnalysis.summary}"</p>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <div className="text-[9px] font-bold text-neutral-500 uppercase">Narrative Depth</div>
+                              <div className="h-1 bg-neutral-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-purple-500" style={{ width: `${alert.aiAnalysis.narrativeScore}%` }} />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[9px] font-bold text-neutral-500 uppercase">Hype Momentum</div>
+                              <div className="h-1 bg-neutral-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500" style={{ width: `${alert.aiAnalysis.hypeScore}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2">
+                        <h4 className="text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2 mb-3">Volume Interval Breakdown</h4>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <div className="text-[9px] text-neutral-500 uppercase font-bold mb-1">1 Hour</div>
+                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volume1h ? alert.token.volume1h / 1000 : 0).toFixed(1)}K</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-neutral-500 uppercase font-bold mb-1">6 Hours</div>
+                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volume6h ? alert.token.volume6h / 1000 : 0).toFixed(1)}K</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-neutral-500 uppercase font-bold mb-1">24 Hours</div>
+                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volume24h ? alert.token.volume24h / 1000 : 0).toFixed(1)}K</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-neutral-500 uppercase font-bold mb-1">Total Proxy</div>
+                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volumeTotal ? alert.token.volumeTotal / 1000 : 0).toFixed(1)}K</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="space-y-4 text-right">
-                      <h4 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest border-b border-neutral-800 pb-1">External Tools</h4>
+                    <div className="space-y-4">
+                      <h4 className="text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2">Exits</h4>
                       <div className="grid grid-cols-1 gap-2">
-                        <a
-                          href={`https://jup.ag/swap/SOL-${alert.token.mint}`}
-                          target="_blank" rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 px-3 py-2 bg-accent text-white rounded text-[11px] font-bold hover:bg-accent/90 transition"
-                        >
-                          Jupiter <ExternalLink className="w-3 h-3" />
-                        </a>
-                        <a
-                          href={`https://dexscreener.com/solana/${alert.token.mint}`}
-                          target="_blank" rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 px-3 py-2 border border-neutral-700 text-neutral-300 rounded text-[11px] font-bold hover:bg-neutral-800 transition"
-                        >
-                          DexScreener <ExternalLink className="w-3 h-3" />
-                        </a>
+                        <a href={`https://jup.ag/swap/SOL-${alert.token.mint}`} target="_blank" className="flex items-center justify-center gap-2 py-2.5 bg-purple-600 text-white rounded text-[10px] font-black uppercase tracking-widest hover:bg-purple-500 transition-all">Jupiter</a>
+                        <a href={`https://dexscreener.com/solana/${alert.token.mint}`} target="_blank" className="flex items-center justify-center gap-2 py-2.5 border border-neutral-800 text-neutral-400 rounded text-[10px] font-black uppercase tracking-widest hover:bg-neutral-800 transition-all">Dexscreener</a>
                       </div>
                     </div>
                   </div>
@@ -569,289 +488,113 @@ const AlertsView = ({ alerts, selectedAlert, setSelectedAlert }: any) => (
   </div>
 );
 
-// Analytics View Component
-const AnalyticsView = ({ alerts, performanceMetrics, scoreDistribution }: any) => (
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    {/* Score Distribution */}
-    <div className="border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
-      <div className="px-6 py-4 border-b border-neutral-800 bg-neutral-900/50 flex items-center gap-2">
-        <PieChart className="w-4 h-4 text-neutral-500" />
-        <h3 className="text-xs font-bold uppercase tracking-wider">Signal Distribution</h3>
-      </div>
-      <div className="p-6 space-y-3">
-        {[90, 80, 70, 60, 50, 40, 30, 20, 10, 0].map(bucket => {
-          const count = scoreDistribution[bucket] || 0;
-          const percentage = alerts.length > 0 ? (count / alerts.length) * 100 : 0;
-          return (
-            <div key={bucket} className="flex items-center gap-4">
-              <div className="w-12 text-[10px] font-bold text-neutral-500 tabular-nums">{bucket}-{bucket + 9}</div>
-              <div className="flex-1 bg-neutral-800/50 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-500 ${bucket >= 80 ? 'bg-green-500' :
-                    bucket >= 60 ? 'bg-blue-500' : 'bg-neutral-600'
-                    }`}
-                  style={{ width: `${percentage}%` }}
-                />
-              </div>
-              <div className="w-8 text-[10px] font-bold text-neutral-400 text-right tabular-nums">{count}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-
-    {/* Performance Summary */}
-    <div className="border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
-      <div className="px-6 py-4 border-b border-neutral-800 bg-neutral-900/50 flex items-center gap-2">
-        <Target className="w-4 h-4 text-neutral-500" />
-        <h3 className="text-xs font-bold uppercase tracking-wider">Historical Accuracy</h3>
-      </div>
-      <div className="p-6 grid grid-cols-1 gap-4">
-        <div className="border border-neutral-800 bg-neutral-950/50 rounded p-4">
-          <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1">Success Rate</div>
-          <div className="text-2xl font-bold text-neutral-200 tabular-nums">
-            {alerts.length > 0 ? ((performanceMetrics.validAlerts / performanceMetrics.totalAlerts) * 100).toFixed(1) : '0.0'}%
-          </div>
-          <p className="text-[10px] text-neutral-600 font-medium mt-1">{performanceMetrics.validAlerts} verified signals / {performanceMetrics.totalAlerts} total</p>
-        </div>
-
-        <div className="border border-neutral-800 bg-neutral-950/50 rounded p-4">
-          <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1">High-Confidence Conversion</div>
-          <div className="text-2xl font-bold text-neutral-200 tabular-nums">
-            {alerts.length > 0 ? ((performanceMetrics.highScoreAlerts / performanceMetrics.totalAlerts) * 100).toFixed(1) : '0.0'}%
-          </div>
-          <p className="text-[10px] text-neutral-600 font-medium mt-1">{performanceMetrics.highScoreAlerts} signals reached 70+ threshold</p>
-        </div>
-
-        <div className="border border-neutral-800 bg-neutral-950/50 rounded p-4">
-          <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1">Whale Participation Success</div>
-          <div className="text-2xl font-bold text-neutral-200 tabular-nums">
-            {performanceMetrics.whaleSuccessRate}%
-          </div>
-          <p className="text-[10px] text-neutral-600 font-medium mt-1">Correlation between whale activity and positive price action</p>
-        </div>
-      </div>
-    </div>
-
-    {/* Top Performers */}
-    <div className="lg:col-span-2 border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
-      <div className="px-6 py-4 border-b border-neutral-800 bg-neutral-900/50 flex items-center gap-2">
-        <TrendingUp className="w-4 h-4 text-neutral-500" />
-        <h3 className="text-xs font-bold uppercase tracking-wider">Top Efficiency Assets</h3>
-      </div>
-      <div className="divide-y divide-neutral-800/50">
-        {alerts
-          .sort((a: EnhancedAlert, b: EnhancedAlert) => b.compositeScore - a.compositeScore)
-          .slice(0, 5)
-          .map((alert: EnhancedAlert) => (
-            <div key={alert.id} className="px-6 py-4 flex items-center justify-between hover:bg-neutral-800/20 transition-colors">
-              <div className="flex items-center gap-6">
-                <div className={`w-10 text-xl font-bold tabular-nums tracking-tighter ${alert.compositeScore >= 80 ? 'text-green-400' : 'text-neutral-400'
-                  }`}>
-                  {alert.compositeScore}
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-neutral-200">{alert.token.symbol}</div>
-                  <div className="text-[10px] text-neutral-500 font-medium tabular-nums">{new Date(alert.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {alert.whaleActivity.involved && (
-                  <span className="px-2 py-0.5 border border-blue-900/30 bg-blue-900/10 text-blue-400 text-[9px] font-bold uppercase tracking-wider rounded">Whale</span>
-                )}
-                {alert.socialSignals.overallScore > 70 && (
-                  <span className="px-2 py-0.5 border border-neutral-700 bg-neutral-800 text-neutral-400 text-[9px] font-bold uppercase tracking-wider rounded">Social</span>
-                )}
-                {alert.isValid && (
-                  <span className="px-2 py-0.5 border border-green-900/30 bg-green-900/10 text-green-500 text-[9px] font-bold uppercase tracking-wider rounded">Verified</span>
-                )}
-              </div>
-            </div>
-          ))}
-      </div>
-    </div>
-  </div>
-);
-
-// Settings Panel Component
-const SettingsPanel = ({ settings, setSettings, onClose }: any) => (
-  <div className="border border-neutral-800 rounded bg-neutral-900 shadow-2xl overflow-hidden mb-8 max-w-5xl mx-auto">
+const SettingsPanel = ({ settings, setSettings, telegramChatId, setTelegramChatId, onSaveSettings, isSaving, saveSuccess, onTestTelegram, subscriptionInfo }: any) => (
+  <div className="border border-neutral-800 rounded bg-neutral-900/80 backdrop-blur-3xl shadow-2xl overflow-hidden mb-12 max-w-4xl mx-auto animate-in zoom-in-95 duration-300">
     <div className="px-6 py-4 border-b border-neutral-800 bg-neutral-900/50 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <Settings className="w-4 h-4 text-neutral-500" />
-        <h3 className="text-xs font-bold uppercase tracking-widest">Configuration Console</h3>
+        <Settings className="w-4 h-4 text-purple-500" />
+        <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-400">System Nucleus</h3>
       </div>
-      <button onClick={onClose} className="p-1 hover:bg-neutral-800 rounded text-neutral-500 transition-colors">
-        <X className="w-4 h-4" />
-      </button>
+    </div>
+    <div className="p-10 grid grid-cols-1 md:grid-cols-2 gap-12">
+      <div className="space-y-8">
+        <div>
+          <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Min Liquidity (Safe Cash) $</label>
+          <input type="number" value={settings.minLiquidity} onChange={e => setSettings({ ...settings, minLiquidity: Number(e.target.value) })} className="w-full bg-neutral-950 border border-neutral-800 rounded px-4 py-3 text-sm text-neutral-200 focus:border-purple-500/50 outline-none transition-all tabular-nums font-bold" />
+        </div>
+        <div>
+          <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Min Volume Spike (Hype) %</label>
+          <input type="number" value={settings.minVolumeIncrease} onChange={e => setSettings({ ...settings, minVolumeIncrease: Number(e.target.value) })} className="w-full bg-neutral-950 border border-neutral-800 rounded px-4 py-3 text-sm text-neutral-200 focus:border-purple-500/50 outline-none transition-all tabular-nums font-bold" />
+        </div>
+        <div>
+          <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Max Top Holder (Fairness) %</label>
+          <input type="number" value={settings.maxTopHolderPercent} onChange={e => setSettings({ ...settings, maxTopHolderPercent: Number(e.target.value) })} className="w-full bg-neutral-950 border border-neutral-800 rounded px-4 py-3 text-sm text-neutral-200 focus:border-purple-500/50 outline-none transition-all tabular-nums font-bold" />
+          <p className="text-[8px] text-neutral-500 mt-2 uppercase font-bold">Max % one person can own (Standard: 10%)</p>
+        </div>
+      </div>
+      <div className="space-y-8">
+        <div>
+          <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Quality Filter (Score 0-100)</label>
+          <input type="number" value={settings.minCompositeScore} onChange={e => setSettings({ ...settings, minCompositeScore: Number(e.target.value) })} className="w-full bg-neutral-950 border border-neutral-800 rounded px-4 py-3 text-sm text-neutral-200 focus:border-purple-500/50 outline-none transition-all tabular-nums font-bold" />
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-4 bg-neutral-950 border border-neutral-800 rounded">
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">Only Whale Activity</span>
+            <button onClick={() => setSettings({ ...settings, whaleOnly: !settings.whaleOnly })} className={`w-10 h-5 rounded-full relative transition-all ${settings.whaleOnly ? 'bg-purple-600' : 'bg-neutral-800'}`}><div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-all ${settings.whaleOnly ? 'translate-x-5' : ''}`} /></button>
+          </div>
+          <div className="flex items-center justify-between p-4 bg-neutral-950 border border-neutral-800 rounded">
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">Telegram Notifications</span>
+            <button onClick={() => setSettings({ ...settings, enableTelegramAlerts: !settings.enableTelegramAlerts })} className={`w-10 h-5 rounded-full relative transition-all ${settings.enableTelegramAlerts ? 'bg-purple-600' : 'bg-neutral-800'}`}><div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-all ${settings.enableTelegramAlerts ? 'translate-x-5' : ''}`} /></button>
+          </div>
+          <div>
+            <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-2">Telegram Chat ID</label>
+            <input
+              type="text"
+              value={telegramChatId}
+              onChange={e => setTelegramChatId(e.target.value)}
+              placeholder="e.g. 12345678"
+              className="w-full bg-neutral-950 border border-neutral-800 rounded px-4 py-3 text-sm text-neutral-200 focus:border-purple-500/50 outline-none transition-all tabular-nums font-bold"
+            />
+            <p className="text-[8px] text-neutral-500 mt-2 uppercase font-bold leading-relaxed">Required for private pings. Find your ID via the bot.</p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">AI Engine Personality</label>
+          <div className="grid grid-cols-3 gap-2">
+            {['conservative', 'balanced', 'aggressive'].map(mode => (
+              <button key={mode} onClick={() => setSettings({ ...settings, aiMode: mode as any })} className={`py-2 rounded text-[9px] font-black uppercase tracking-widest border transition-all ${settings.aiMode === mode ? 'bg-purple-500/20 border-purple-500/50 text-purple-400' : 'bg-neutral-950 border-neutral-900 text-neutral-600'}`}>{mode}</button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-12">
-      <div className="space-y-6">
-        <div className="space-y-1">
-          <h4 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Discovery Filters</h4>
-          <p className="text-[10px] text-neutral-600 font-medium">Define baseline liquidity and volume requirements.</p>
+    {/* Subscription Box */}
+    <div className="mx-10 mb-10 p-6 bg-purple-900/10 border border-purple-500/20 rounded-xl flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+          <Zap className="w-5 h-5" />
         </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1.5 ml-1">Min Liquidity (USD)</label>
-            <input
-              type="number"
-              value={settings.minLiquidity}
-              onChange={(e) => setSettings({ ...settings, minLiquidity: Number(e.target.value) })}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-200 focus:border-accent outline-none transition-colors tabular-nums"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1.5 ml-1">Min Volume Spike (%)</label>
-            <input
-              type="number"
-              value={settings.minVolumeIncrease}
-              onChange={(e) => setSettings({ ...settings, minVolumeIncrease: Number(e.target.value) })}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-200 focus:border-accent outline-none transition-colors tabular-nums"
-            />
+        <div>
+          <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Subscription Tier</div>
+          <div className="text-sm font-bold text-neutral-200">
+            {subscriptionInfo.expiry ? `Premium Member (Expires: ${new Date(subscriptionInfo.expiry).toLocaleDateString()})` : `Free Trial (${subscriptionInfo.trialDaysLeft} days remaining)`}
           </div>
         </div>
       </div>
+      {!subscriptionInfo.expiry && (
+        <a href="/subscribe" className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-[10px] font-black uppercase tracking-widest text-white rounded transition-all">Upgrade Now</a>
+      )}
+    </div>
 
-      <div className="space-y-6">
-        <div className="space-y-1">
-          <h4 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Signal Sensitivity</h4>
-          <p className="text-[10px] text-neutral-600 font-medium">Control the thresholds for alert generation.</p>
-        </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1.5 ml-1">Composite Threshold</label>
-            <input
-              type="number"
-              max="100" min="0"
-              value={settings.minCompositeScore}
-              onChange={(e) => setSettings({ ...settings, minCompositeScore: Math.min(100, Number(e.target.value)) })}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-200 focus:border-accent outline-none transition-colors tabular-nums"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1.5 ml-1">Max Top Holder %</label>
-            <input
-              type="number"
-              value={settings.maxTopHolderPercent}
-              onChange={(e) => setSettings({ ...settings, maxTopHolderPercent: Number(e.target.value) })}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-200 focus:border-accent outline-none transition-colors tabular-nums"
-            />
-          </div>
-        </div>
-      </div>
+    <div className="px-10 py-6 border-t border-neutral-800 bg-neutral-950/50 flex items-center justify-between">
+      <button onClick={onTestTelegram} className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-500 hover:text-purple-400 transition-all">Verify Bot Connection</button>
+      <button onClick={() => onSaveSettings()} disabled={isSaving} className="px-10 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-black uppercase tracking-[0.3em] transition-all shadow-xl shadow-purple-600/20 flex items-center gap-2">
+        {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+        {isSaving ? 'Syncing...' : 'Lock Parameters'}
+      </button>
+    </div>
+  </div>
+);
 
-      <div className="space-y-6">
-        <div className="space-y-1">
-          <h4 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">System Engine</h4>
-          <p className="text-[10px] text-neutral-600 font-medium">Low-level scanning and notification parameters.</p>
-        </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-bold text-neutral-500 uppercase mb-1.5 ml-1">Polling Interval (SEC)</label>
-            <input
-              type="number"
-              value={settings.scanInterval}
-              onChange={(e) => setSettings({ ...settings, scanInterval: Number(e.target.value) })}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-200 focus:border-accent outline-none transition-colors tabular-nums"
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 border border-neutral-800 bg-neutral-950 rounded mt-4">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase">Whale Protocol Only</span>
-            <button
-              onClick={() => setSettings({ ...settings, whaleOnly: !settings.whaleOnly })}
-              className={`w-10 h-5 rounded-full relative transition-colors ${settings.whaleOnly ? 'bg-accent' : 'bg-neutral-800'}`}
-            >
-              <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${settings.whaleOnly ? 'translate-x-5' : ''}`} />
-            </button>
-          </div>
-        </div>
+const AnalyticsView = ({ alerts, scoreDistribution }: any) => (
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
+      <div className="px-6 py-4 border-b border-neutral-800 text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">Signal Distribution</div>
+      <div className="p-6 space-y-4 text-xs">
+        Data will populate as node validates signals.
       </div>
     </div>
   </div>
 );
 
-
-// Patterns View Component
 const PatternsView = ({ hourlyDistribution, performanceMetrics }: any) => (
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    <div className="lg:col-span-2 border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
-      <div className="px-6 py-4 border-b border-neutral-800 bg-neutral-900/50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-neutral-500" />
-          <h2 className="text-xs font-bold tracking-tight uppercase">Temporal Signal Density</h2>
-        </div>
-        <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">24-Hour Network Cycle</div>
-      </div>
-
-      <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
-          {Array.from({ length: 24 }).map((_, i) => {
-            const data = hourlyDistribution[i] || { count: 0, totalScore: 0 };
-            const avgScore = data.count > 0 ? Math.round(data.totalScore / data.count) : 0;
-            const maxCount = Math.max(...Object.values(hourlyDistribution).map((d: any) => d.count), 1);
-            const barWidth = (data.count / maxCount) * 100;
-
-            return (
-              <div key={i} className="flex items-center gap-3 py-0.5 group">
-                <div className="w-8 text-[10px] font-bold text-neutral-600 tabular-nums">{i.toString().padStart(2, '0')}:00</div>
-                <div className="flex-1 bg-neutral-800/10 h-3 rounded-px overflow-hidden flex items-center">
-                  <div
-                    className={`h-full transition-all duration-700 ${i === performanceMetrics.bestHour ? 'bg-blue-500/50' :
-                      i === performanceMetrics.worstHour ? 'bg-neutral-800' : 'bg-neutral-700/40'
-                      }`}
-                    style={{ width: `${Math.max(barWidth, 1)}%` }}
-                  />
-                </div>
-                <div className="w-16 text-right flex items-center justify-end gap-2">
-                  <span className="text-[10px] font-bold text-neutral-400 tabular-nums">{data.count}</span>
-                  <span className={`text-[9px] font-bold uppercase tabular-nums ${avgScore >= 70 ? 'text-green-500/70' : 'text-neutral-600'}`}>{avgScore}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-
-    <div className="space-y-6">
-      <div className="border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
-        <div className="px-6 py-4 border-b border-neutral-800 bg-neutral-900/50">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Optimization Insights</h3>
-        </div>
-        <div className="p-6 space-y-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-blue-400">
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-bold uppercase tracking-tight">Peak Window</span>
-            </div>
-            <p className="text-xs text-neutral-400 leading-relaxed">
-              Target signals between <span className="text-neutral-200 font-bold tabular-nums">{performanceMetrics.bestHour}:00</span> and <span className="text-neutral-200 font-bold tabular-nums">{(performanceMetrics.bestHour + 2) % 24}:00</span> for maximum conversion efficiency.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-neutral-500">
-              <Zap className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-bold uppercase tracking-tight">System Efficiency</span>
-            </div>
-            <p className="text-xs text-neutral-400 leading-relaxed">
-              Whale participation signals are showing a <span className="text-neutral-200 font-bold tabular-nums">{performanceMetrics.whaleSuccessRate}%</span> correlation with high-conviction outcomes.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-neutral-500">
-              <Shield className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-bold uppercase tracking-tight">Safety Protocol</span>
-            </div>
-            <p className="text-xs text-neutral-400 leading-relaxed">
-              Composite scores below <span className="text-neutral-200 font-bold tabular-nums">40</span> should be discarded regardless of narrative strength.
-            </p>
-          </div>
-        </div>
-      </div>
+  <div className="border border-neutral-800 rounded bg-neutral-900/30 overflow-hidden">
+    <div className="px-6 py-4 border-b border-neutral-800 text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">Network Volatility Cycles</div>
+    <div className="p-8 text-xs text-neutral-600">
+      Awaiting sufficient data points for cycle analysis.
     </div>
   </div>
 );

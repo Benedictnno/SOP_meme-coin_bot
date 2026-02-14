@@ -33,8 +33,11 @@ export async function detectBundledLaunch(mintAddress: string): Promise<{
         const signatures = data.result.reverse(); // Start from the beginning
 
         // 2. Fetch those transactions (batching would be better, but for simplicity we'll do sequential or small batches)
-        // To save time/API calls, let's just look at the first 20 transactions
-        const firstSigs = signatures.slice(0, 20).map((s: any) => s.signature);
+        // To save time/API calls, let's just look at the first 10 transactions to stay within free tier limits
+        const firstSigs = signatures.slice(0, 10).map((s: any) => s.signature);
+
+        // Add a small delay to avoid 429 on free tier before batch request
+        await new Promise(resolve => setTimeout(resolve, 800));
 
         const txsResponse = await fetch(rpcUrl, {
             method: 'POST',
@@ -48,6 +51,12 @@ export async function detectBundledLaunch(mintAddress: string): Promise<{
         });
 
         const txsData = await txsResponse.json();
+
+        if (!Array.isArray(txsData)) {
+            console.error('Bundle Detector: RPC returned non-array for batch request', txsData);
+            return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: [] };
+        }
+
         const transactions = txsData.map((d: any) => d.result).filter(Boolean);
 
         if (transactions.length === 0) return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: [] };
