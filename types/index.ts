@@ -205,3 +205,28 @@ export interface DexPair {
     }>;
   };
 }
+/**
+ * Tracked wallet structure
+ */
+export interface TrackedWallet {
+  _id?: any;
+  userId: string;
+  address: string;
+  label?: string;
+  createdAt: string;
+  lastNotifiedTx?: string;
+}
+
+/**
+ * Wallet activity (swap) structure
+ */
+export interface WalletActivity {
+  signature: string;
+  timestamp: string;
+  type: 'buy' | 'sell';
+  tokenMint: string;
+  tokenSymbol: string;
+  solAmount: number;
+  tokenAmount: number;
+  priceUSD?: number;
+}

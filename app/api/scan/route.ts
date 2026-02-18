@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { scanDEXScreener } from '@/lib/validators/dexscreener';
 import { validateTokenEnhanced } from '@/lib/sop-validator';
+import { createEnhancedAlert } from '@/lib/validation-utils';
 import { BotSettings, EnhancedAlert } from '@/types';
 import { getUserById, hasActiveSubscription } from '@/lib/users';
 
@@ -73,69 +74,11 @@ export async function POST(request: Request) {
       scannedCount++;
 
       try {
-        // Run the enhanced SOP validation
-        const validationResult = await validateTokenEnhanced(token, settings);
+        // Run the enhanced SOP validation and alert creation
+        const alert = await createEnhancedAlert(token, settings);
+        const { isValid, compositeScore } = alert;
+        const validationResult = { checks: alert.checks, enhancements: { whaleActivity: alert.whaleActivity, txPatterns: { suspiciousPatterns: alert.risks.filter(r => r.includes('Pattern')) }, bundleAnalysis: alert.bundleAnalysis, devScore: alert.devScore } }; // Minimal shim for remaining logic
 
-        // Calculate composite score
-        const baseScore = validationResult.rugCheckScore * 0.4;
-        const narrativeScore = validationResult.enhancements.narrativeQuality.score * 0.2;
-        const socialScore = validationResult.enhancements.socialSignals.overallScore;
-        const whaleScore = validationResult.enhancements.whaleActivity.score;
-        const liquidityScore = validationResult.enhancements.liquidityStability.isStable ? 100 : 0;
-
-        let compositeScore = baseScore + narrativeScore + (socialScore * 0.15) + (whaleScore * 0.05) + (liquidityScore * 0.2);
-
-        // Penalties
-        if (!validationResult.enhancements.freshness.isFresh) compositeScore -= 10;
-        if (!validationResult.enhancements.txPatterns.isOrganic) compositeScore -= 20;
-        if (!validationResult.enhancements.marketContext.isRiskOn) compositeScore -= 10;
-        if (validationResult.enhancements.bundleAnalysis.isBundled) compositeScore -= 30;
-        if (validationResult.enhancements.devScore && validationResult.enhancements.devScore.score < 20) compositeScore -= 20;
-
-        compositeScore = Math.max(0, Math.min(100, Math.round(compositeScore)));
-
-        const isValid = validationResult.checks.narrative && validationResult.checks.liquidity && validationResult.checks.contract && validationResult.checks.sellTest;
-
-        // Recommendations
-        const recommendations = [];
-        if (compositeScore >= 80) recommendations.push('🟢 STRONG BUY - All signals Aligned');
-        else if (compositeScore >= 70) recommendations.push('🟢 BUY - High confidence setup');
-        else if (compositeScore >= 60) recommendations.push('🟡 MODERATE - Exercise caution');
-        else recommendations.push('🔴 AVOID - High risk');
-
-        if (validationResult.enhancements.txPatterns.suspiciousPatterns.length > 0) recommendations.push('⚠️ Suspicious Patterns Detected');
-        if (validationResult.enhancements.whaleActivity.involved) recommendations.push('🐋 Whale Wallets Involved');
-        if (validationResult.enhancements.bundleAnalysis.isBundled) recommendations.push('⛔ BUNDLED LAUNCH - Avoid');
-        if (validationResult.enhancements.devScore && validationResult.enhancements.devScore.reputation === 'High') recommendations.push('⭐ Trusted Developer History');
-
-        // AI analysis integration
-        if (validationResult.enhancements.aiAnalysis) {
-          recommendations.push(`🤖 AI: ${validationResult.enhancements.aiAnalysis.summary}`);
-          if (validationResult.enhancements.aiAnalysis.potential === 'moonshot') {
-            recommendations.push('🚀 AI High Potential Detected');
-          }
-        }
-
-        const alert: EnhancedAlert = {
-          id: `alert-${token.mint}-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          token,
-          checks: validationResult.checks,
-          isValid,
-          passedChecks: Object.values(validationResult.checks).filter(Boolean).length,
-          totalChecks: Object.keys(validationResult.checks).length,
-          setupType: token.volumeIncrease > 500 ? 'Base Break' : 'Pullback Entry',
-          rugCheckScore: validationResult.rugCheckScore,
-          compositeScore,
-          socialSignals: validationResult.enhancements.socialSignals,
-          whaleActivity: validationResult.enhancements.whaleActivity,
-          timeMultiplier: 1.0,
-          recommendations,
-          risks: validationResult.risks,
-          devScore: validationResult.enhancements.devScore || undefined,
-          bundleAnalysis: validationResult.enhancements.bundleAnalysis,
-          aiAnalysis: validationResult.enhancements.aiAnalysis ? { ...validationResult.enhancements.aiAnalysis, mode: settings.aiMode } : undefined
-        };
 
         if (alert.aiAnalysis) {
           console.log(`[AI Analysis Generated] for ${token.symbol}: ${alert.aiAnalysis.summary.substring(0, 50)}...`);

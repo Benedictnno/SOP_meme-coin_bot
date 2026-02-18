@@ -98,3 +98,9 @@ export async function getUserById(id: string) {
         return null;
     }
 }
+
+export async function getUserByTelegramChatId(chatId: string) {
+    const db = await getDatabase();
+    return await db.collection<User>('users').findOne({ telegramChatId: chatId });
+}
+

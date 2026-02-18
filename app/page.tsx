@@ -1,41 +1,8 @@
 "use client"
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 
-export default function LandingPage() {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const handleWaitlistSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      const response = await fetch('/api/waitlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: data.message });
-        setEmail('');
-      } else {
-        setMessage({ type: 'error', text: data.message });
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to join waitlist. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
+export default function Home() {
   return (
     <div className="font-sans antialiased text-white bg-background-dark selection:bg-primary/30">
       {/* Navbar */}
@@ -49,9 +16,9 @@ export default function LandingPage() {
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/60">
             <a className="hover:text-primary transition-colors" href="#features">Features</a>
-          {/* Live Demo */}
-            {/* <Link className="hover:text-primary transition-colors" href="/dashboard">Live Demo</Link>  */}
-            <a className="px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-white transition-all" href="#waitlist">Early Access</a>
+            <Link className="hover:text-primary transition-colors" href="/dashboard">Dashboard</Link>
+            <Link className="hover:text-primary transition-colors" href="/login">Login</Link>
+            <Link className="px-5 py-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-full text-primary transition-all font-bold" href="/register">Get Started</Link>
           </div>
         </div>
       </nav>
@@ -66,7 +33,7 @@ export default function LandingPage() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
             </span>
-            V1.0 NOW IN PRIVATE BETA
+            V1.0 NOW LIVE - ACCESS GRANTED
           </div>
           <h1 className="font-display text-5xl md:text-8xl font-bold tracking-tight leading-tight mb-8">
             Stop Getting Rugged. <br />
@@ -75,42 +42,22 @@ export default function LandingPage() {
           <p className="text-xl text-white/60 max-w-2xl mx-auto mb-12">
             The ultimate security validator for Solana meme coin traders. Real-time contract hardening, whale detection, and organic filter simulations.
           </p>
-          <form onSubmit={handleWaitlistSubmit} className="max-w-md mx-auto p-1 rounded-2xl bg-gradient-to-r from-primary/50 to-secondary/50 glow-cyan" id="waitlist">
-            <div className="flex bg-background-dark rounded-xl p-1">
-              <input
-                className="w-full bg-transparent border-none focus:ring-0 text-white px-4 py-3 placeholder:text-white/30"
-                placeholder="Enter your email address"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                required
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-primary text-background-dark font-bold px-6 py-3 rounded-lg hover:brightness-110 transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <span className="material-symbols-outlined text-sm animate-spin">sync</span>
-                    Joining...
-                  </>
-                ) : (
-                  'Join Waitlist'
-                )}
-              </button>
-            </div>
-          </form>
-          {message && (
-            <div className={`mt-4 p-3 rounded-lg max-w-md mx-auto text-center text-sm font-medium ${message.type === 'success'
-                ? 'bg-success/10 text-success border border-success/30'
-                : 'bg-red-500/10 text-red-400 border border-red-500/30'
-              }`}>
-              {message.text}
-            </div>
-          )}
-          <p className="mt-4 text-sm text-white/40">Join 2,400+ traders waiting for early access.</p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href="/dashboard"
+              className="w-full sm:w-auto px-8 py-4 bg-primary text-background-dark font-bold rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 group shadow-lg shadow-primary/20"
+            >
+              Start Scanning Now
+              <span className="material-icons-round transition-transform group-hover:translate-x-1">arrow_forward</span>
+            </Link>
+            <Link
+              href="/register"
+              className="w-full sm:w-auto px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2"
+            >
+              Create Account
+            </Link>
+          </div>
+          <p className="mt-8 text-sm text-white/40">Trusted by 5,000+ active traders scanning DeFi opportunities.</p>
         </div>
       </section>
 
@@ -350,10 +297,10 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="p-4 bg-white/5 border-t border-white/10 flex gap-4">
-              <button className="flex-1 py-4 bg-secondary text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-all glow-purple-hover active:scale-95">
+              <Link href="/dashboard" className="flex-1 py-4 bg-secondary text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-all glow-purple-hover active:scale-95">
                 <span className="material-icons-round">send</span>
-                Join the Alpha Telegram
-              </button>
+                Access the Alpha Stream
+              </Link>
             </div>
           </div>
         </div>
@@ -456,3 +403,4 @@ export default function LandingPage() {
     </div>
   );
 }
+

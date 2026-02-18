@@ -59,7 +59,7 @@ export async function sendTelegramAlert(alert: EnhancedAlert, overrideChatId?: s
  * @param alert - Alert object
  * @returns Formatted message string
  */
-function formatAlertMessage(alert: EnhancedAlert): string {
+export function formatAlertMessage(alert: EnhancedAlert): string {
   const { token, checks, passedChecks, totalChecks, setupType, rugCheckScore, compositeScore, aiAnalysis, risks } = alert;
 
   // Build check status indicators
@@ -244,6 +244,68 @@ Check the dashboard for full details.
 
   } catch (error) {
     console.error('Batch summary failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Send alert for wallet activity
+ * @param activity - Wallet activity data
+ * @param label - Wallet label
+ * @param walletAddress - Wallet address
+ * @param alert - Enhanced alert object (if token was validated)
+ * @param chatId - Target Telegram chat ID
+ */
+export async function sendWalletActivityAlert(
+  activity: any,
+  label: string,
+  walletAddress: string,
+  alert: EnhancedAlert | null,
+  chatId: string
+): Promise<boolean> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken || !chatId) return false;
+
+  const typeEmoji = activity.type === 'buy' ? '🟢 BUY' : '🔴 SELL';
+  const confidenceEmoji = alert?.compositeScore && alert.compositeScore >= 70 ? '💎' : '⚠️';
+
+  let message = `
+🔔 *WALLET TRACKER: ${typeEmoji}*
+
+*Wallet:* ${label}
+\`${walletAddress}\`
+
+*Token:* ${activity.tokenSymbol}
+*Amount:* ${activity.tokenAmount.toFixed(2)} (${activity.solAmount.toFixed(2)} SOL)
+
+${alert ? `*SOP Security Validation:*
+🛡️ Alpha Score: ${alert.compositeScore}/100 ${confidenceEmoji}
+✅ Checks: ${alert.passedChecks}/${alert.totalChecks}
+⚠️ Risks: ${alert.risks.length > 0 ? alert.risks[0] : 'None'}
+
+[Buy on Jupiter](https://jup.ag/swap/SOL-${activity.tokenMint})
+` : `_Token security validation not available_`}
+
+[View Transaction](https://solscan.io/tx/${activity.signature})
+  `.trim();
+
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${botToken}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true
+        })
+      }
+    );
+    return response.ok;
+  } catch (error) {
+    console.error('Wallet activity alert failed:', error);
     return false;
   }
 }

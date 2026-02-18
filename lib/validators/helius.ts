@@ -290,3 +290,66 @@ export async function getWhaleActivity(
     return { involved: false, confidence: 0, score: 0 };
   }
 }
+
+/**
+ * Get recent swap activity for a wallet
+ * @param address - Solana wallet address
+ * @returns Array of wallet activity (swaps)
+ */
+export async function getWalletActivity(address: string): Promise<any[]> {
+  const rpcUrl = process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL;
+  if (!rpcUrl) return [];
+
+  // Transform URL to Helius API URL for enriched transactions
+  // Helius RPC: https://mainnet.helius-rpc.com/?api-key=KEY
+  // Enriched Tx: https://api.helius.xyz/v0/addresses/ADDRESS/transactions?api-key=KEY
+  const apiKey = new URL(rpcUrl).searchParams.get('api-key');
+  if (!apiKey) return [];
+
+  const apiUrl = `https://api.helius.xyz/v0/addresses/${address}/transactions?api-key=${apiKey}&type=SWAP`;
+
+  try {
+    const response = await fetch(apiUrl);
+    if (!response.ok) return [];
+
+    const transactions = await response.json();
+
+    return transactions.map((tx: any) => {
+      const swap = tx.events?.swap;
+      if (!swap) return null;
+
+      const isBuy = swap.nativeInput !== null; // Buying token with SOL (usually)
+
+      // Try to find the non-SOL token mint/symbol/amount more robustly
+      // Sometimes Helius puts SOL in tokenInputs/Outputs too
+      const allTokens = [...(swap.tokenInputs || []), ...(swap.tokenOutputs || [])];
+      const targetToken = allTokens.find((t: any) =>
+        t.mint !== 'So11111111111111111111111111111111111111112' &&
+        t.mint !== 'So11111111111111111111111111111111111111111'
+      );
+
+      const tokenMint = targetToken?.mint;
+      const tokenSymbol = targetToken?.symbol;
+      const solAmount = isBuy ? (swap.nativeInput?.amount || 0) / 1e9 : (swap.nativeOutput?.amount || 0) / 1e9;
+      const tokenAmount = targetToken?.amount || 0;
+
+      return {
+        signature: tx.signature,
+        timestamp: new Date(tx.timestamp * 1000).toISOString(),
+        type: isBuy ? 'buy' : 'sell',
+        tokenMint,
+        tokenSymbol: tokenSymbol || 'UNKNOWN',
+        solAmount,
+        tokenAmount: Number(tokenAmount),
+        description: tx.description
+      };
+
+    }).filter(Boolean);
+
+
+  } catch (error) {
+    console.error('Wallet activity error:', error);
+    return [];
+  }
+}
+
