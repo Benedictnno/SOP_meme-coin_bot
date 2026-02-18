@@ -17,6 +17,7 @@ export interface AIAnalysis {
     summary: string;
     risks: string[];
     potential: string;
+    mode?: string; // Analysis mode used
 }
 
 /**
