@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     // Verify cron secret for security
     const authHeader = request.headers.get('authorization');
     const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
-    
+
     if (authHeader !== expectedAuth) {
       console.error('Unauthorized cron request');
       return NextResponse.json(
@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-    
+
     console.log('Cron job triggered at', new Date().toISOString());
-    
+
     // Load settings from environment variables
     const settings: BotSettings = {
       minLiquidity: Number(process.env.MIN_LIQUIDITY_USD) || 50000,
@@ -36,19 +36,20 @@ export async function GET(request: NextRequest) {
       scanInterval: Number(process.env.SCAN_INTERVAL_SECONDS) || 300,
       enableTelegramAlerts: process.env.TELEGRAM_BOT_TOKEN ? true : false,
       telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
-      telegramChatId: process.env.TELEGRAM_CHAT_ID
+      telegramChatId: process.env.TELEGRAM_CHAT_ID,
+      aiMode: 'balanced'
     };
-    
+
     console.log('Cron settings:', {
       minLiquidity: settings.minLiquidity,
       maxTopHolder: settings.maxTopHolderPercent,
       minVolume: settings.minVolumeIncrease,
       telegramEnabled: settings.enableTelegramAlerts
     });
-    
+
     // Trigger scan via internal API call
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    
+
     const scanResponse = await fetch(`${appUrl}/api/scan`, {
       method: 'POST',
       headers: {
@@ -56,21 +57,21 @@ export async function GET(request: NextRequest) {
       },
       body: JSON.stringify(settings)
     });
-    
+
     if (!scanResponse.ok) {
       const error = await scanResponse.text();
       console.error('Scan failed:', error);
       throw new Error(`Scan failed: ${error}`);
     }
-    
+
     const result = await scanResponse.json();
-    
+
     console.log('Cron scan complete:', {
       scanned: result.scanned,
       valid: result.valid,
       timestamp: new Date().toISOString()
     });
-    
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -78,10 +79,10 @@ export async function GET(request: NextRequest) {
       valid: result.valid,
       message: `Scanned ${result.scanned} tokens, found ${result.valid} valid setups`
     });
-    
+
   } catch (error) {
     console.error('Cron job error:', error);
-    
+
     return NextResponse.json(
       {
         success: false,
