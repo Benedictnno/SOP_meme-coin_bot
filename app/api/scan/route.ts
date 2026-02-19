@@ -110,10 +110,11 @@ export async function POST(request: Request) {
           let sentToAnyUser = false;
           for (const user of usersToAlert) {
             const userSettings = user.settings || masterSettings;
-            if (token.liquidity >= (userSettings.minLiquidity || 0) &&
-              (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100) &&
-              alert.compositeScore >= (userSettings.minCompositeScore || 0)) {
+            const meetsLiquidity = token.liquidity >= (userSettings.minLiquidity || 0);
+            const meetsHolders = (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100);
+            const meetsScore = alert.compositeScore >= (userSettings.minCompositeScore || 0);
 
+            if (meetsLiquidity && meetsHolders && meetsScore) {
               const lastSent = await db.collection('sent_alerts').findOne({
                 userId: user._id.toString(),
                 mint: token.mint,
@@ -131,7 +132,12 @@ export async function POST(request: Request) {
                   timestamp: new Date().toISOString()
                 });
                 sentToAnyUser = true;
+                console.log(`[Alert Sent] ${token.symbol} sent to ${user.email}`);
+              } else {
+                console.log(`[Alert Skipped] ${token.symbol} for ${user.email}: lastSent: ${!!lastSent}, enabled: ${userSettings.enableTelegramAlerts}, chatId: ${!!user.telegramChatId}`);
               }
+            } else {
+              console.log(`[Rejection] ${token.symbol} for ${user.email}: Liquidity: ${token.liquidity}/${userSettings.minLiquidity} (${meetsLiquidity}), Holders: ${token.topHolderPercent}/${userSettings.maxTopHolderPercent} (${meetsHolders}), Score: ${alert.compositeScore}/${userSettings.minCompositeScore} (${meetsScore})`);
             }
           }
           if (sentToAnyUser) validCount++;

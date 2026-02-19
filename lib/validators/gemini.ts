@@ -107,7 +107,14 @@ export async function analyzeTokenNarrative(
                 if (is429 && attempt < maxRetries - 1) {
                     // Parse retry delay from error message, or use exponential backoff
                     const retryMatch = err?.message?.match(/retry\s+in\s+([\d.]+)s/i);
-                    const waitSec = retryMatch ? parseFloat(retryMatch[1]) + 1 : Math.pow(2, attempt + 1) * 5;
+                    let waitSec = retryMatch ? parseFloat(retryMatch[1]) + 1 : Math.pow(2, attempt + 1) * 5;
+
+                    // Cap wait time to 5 seconds to avoid blocking the scan pipeline
+                    if (waitSec > 5) {
+                        console.warn(`[Gemini] Rate limit delay too long (${waitSec.toFixed(1)}s), failing fast for this token.`);
+                        return null;
+                    }
+
                     console.warn(`[Gemini] Rate limited (attempt ${attempt + 1}/${maxRetries}). Retrying in ${waitSec.toFixed(1)}s...`);
                     await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
                     continue;

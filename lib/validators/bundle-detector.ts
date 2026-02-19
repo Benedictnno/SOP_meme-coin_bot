@@ -52,6 +52,12 @@ export async function detectBundledLaunch(mintAddress: string): Promise<{
 
         const txsData = await txsResponse.json();
 
+        // Handle error responses (like 429 too many requests)
+        if (txsData.error) {
+            console.warn(`Bundle Detector: RPC returned error [${txsData.error.code}] ${txsData.error.message}`);
+            return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: ['RPC Limit Reached'] };
+        }
+
         if (!Array.isArray(txsData)) {
             console.error('Bundle Detector: RPC returned non-array for batch request', txsData);
             return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: [] };

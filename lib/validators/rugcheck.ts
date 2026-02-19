@@ -12,18 +12,26 @@ const RUGCHECK_BASE = 'https://api.rugcheck.xyz/v1';
  */
 export async function validateContract(mintAddress: string): Promise<RugCheckResponse> {
   try {
-    const response = await fetch(`${RUGCHECK_BASE}/tokens/${mintAddress}/report`, {
-      headers: {
-        'Accept': 'application/json'
-      }
+    let response = await fetch(`${RUGCHECK_BASE}/tokens/${mintAddress}/report`, {
+      headers: { 'Accept': 'application/json' }
     });
+
+    // Handle 429 Rate Limit with a quick retry
+    if (response.status === 429) {
+      console.warn(`RugCheck rate limited for ${mintAddress}, retrying in 2s...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      response = await fetch(`${RUGCHECK_BASE}/tokens/${mintAddress}/report`, {
+        headers: { 'Accept': 'application/json' }
+      });
+    }
 
     if (!response.ok) {
       console.warn(`RugCheck API error: ${response.status} for ${mintAddress}`);
+      // Fail neutral rather than 0 so we don't block good tokens during API outages
       return {
         verified: false,
-        risks: ['API error or token not found'],
-        score: 0
+        risks: [`RugCheck API error (${response.status})`],
+        score: 50 // Neutral score
       };
     }
 
@@ -77,7 +85,7 @@ export async function validateContract(mintAddress: string): Promise<RugCheckRes
     return {
       verified: false,
       risks: ['Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error')],
-      score: 0
+      score: 50 // Neutral score on catch
     };
   }
 }
