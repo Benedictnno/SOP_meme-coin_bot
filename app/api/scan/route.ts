@@ -9,53 +9,66 @@ import { getUserById, hasActiveSubscription } from '@/lib/users';
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const authHeader = request.headers.get('authorization');
+    const isMasterScan = authHeader === `Bearer ${process.env.CRON_SECRET}`;
 
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please sign in.' },
-        { status: 401 }
-      );
+    let usersToAlert: any[] = [];
+    let masterSettings: BotSettings;
+
+    if (isMasterScan) {
+      // MASTER SCAN MODE: Single discovery, multi-user alerting
+      console.log('Master Scan triggered via Cron Secret');
+      const { getAllActiveUsers } = await import('@/lib/users');
+      usersToAlert = await getAllActiveUsers();
+      console.log(`Master Scan: Identified ${usersToAlert.length} active users to alert`);
+
+      const bodySettings = await request.json().catch(() => ({}));
+      masterSettings = {
+        minLiquidity: Number(process.env.MIN_LIQUIDITY_USD) || 50000,
+        maxTopHolderPercent: Number(process.env.MAX_TOP_HOLDER_PERCENT) || 10,
+        minVolumeIncrease: Number(process.env.MIN_VOLUME_INCREASE_PERCENT) || 200,
+        ...bodySettings
+      };
+    } else {
+      // SINGLE USER MODE: Standard dashboard trigger
+      const session = await getServerSession(authOptions);
+      if (!session || !session.user) {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized. Please sign in.' },
+          { status: 401 }
+        );
+      }
+
+      const userId = (session.user as any).id;
+      const user = await getUserById(userId);
+      if (!user) {
+        return NextResponse.json(
+          { success: false, error: 'User not found.' },
+          { status: 404 }
+        );
+      }
+
+      const isSubscribed = await hasActiveSubscription(user);
+      if (!isSubscribed) {
+        return NextResponse.json(
+          { success: false, error: 'subscription_required', message: 'Your free trial has ended.' },
+          { status: 403 }
+        );
+      }
+
+      usersToAlert = [user];
+      const bodySettings = await request.json().catch(() => ({}));
+      masterSettings = {
+        minLiquidity: user.settings?.minLiquidity || 50000,
+        maxTopHolderPercent: user.settings?.maxTopHolderPercent || 10,
+        minVolumeIncrease: user.settings?.minVolumeIncrease || 200,
+        ...bodySettings
+      };
     }
 
-    const userId = (session.user as any).id;
-    const user = await getUserById(userId);
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'User not found.' },
-        { status: 404 }
-      );
-    }
-
-    // Check Subscription / Free Trial
-    const isSubscribed = await hasActiveSubscription(user);
-
-    // --- Behavioral Decay: expired users get a teaser scan, not a hard block ---
-    const isExpired = !isSubscribed;
-    const hasTelegram = !!(user.telegramChatId);
-
-    // Use user-specific settings if available
-    const bodySettings = await request.json().catch(() => ({}));
-    const settings: BotSettings = user.settings ? {
-      ...user.settings,
-      ...bodySettings
-    } : {
-      minLiquidity: 50000,
-      maxTopHolderPercent: 10,
-      minVolumeIncrease: 200,
-      scanInterval: 60,
-      enableTelegramAlerts: false,
-      minCompositeScore: 50,
-      minSocialScore: 30,
-      whaleOnly: false,
-      aiMode: 'balanced',
-      ...bodySettings
-    };
-
-    // 1. Discover Tokens via DEX Screener
-    console.log(`Starting scan for ${user.email} (expired=${isExpired})`);
-    const discoveredTokens = await scanDEXScreener(settings.minVolumeIncrease);
+    // 1. Discover Tokens using Master Settings
+    console.log(`Starting discovery scan with minVolume: ${masterSettings.minVolumeIncrease}%`);
+    const discoveredTokens = await scanDEXScreener(masterSettings.minVolumeIncrease);
     console.log(`Discovered ${discoveredTokens.length} potential tokens`);
 
     const alerts: EnhancedAlert[] = [];
@@ -65,82 +78,67 @@ export async function POST(request: Request) {
     // 2. Validate each token
     for (const token of discoveredTokens) {
       scannedCount++;
-
       try {
-        const alert = await createEnhancedAlert(token, settings);
-        const { isValid, compositeScore } = alert;
-        const validationResult = { checks: alert.checks, enhancements: { whaleActivity: alert.whaleActivity, txPatterns: { suspiciousPatterns: alert.risks.filter(r => r.includes('Pattern')) }, bundleAnalysis: alert.bundleAnalysis, devScore: alert.devScore } };
+        // Validate token ONCE with master settings for initial check
+        const alert = await createEnhancedAlert(token, masterSettings);
 
-        if (alert.aiAnalysis) {
-          console.log(`[AI Analysis Generated] for ${token.symbol}: ${alert.aiAnalysis.summary.substring(0, 50)}...`);
-        } else {
-          console.log(`[AI Analysis Missing] for ${token.symbol}`);
-        }
+        // Record if it fits ANY user criteria
+        let sentAny = false;
 
-        const passesWhaleFilter = !settings.whaleOnly || validationResult.enhancements.whaleActivity.involved;
+        for (const user of usersToAlert) {
+          const userSettings = user.settings || masterSettings;
 
-        if (compositeScore >= (settings.minCompositeScore || 0) && passesWhaleFilter) {
-          const { getDatabase } = await import('@/lib/mongodb');
-          const db = await getDatabase();
-          const lastSent = await db.collection('sent_alerts').findOne({
-            userId: userId,
-            mint: token.mint,
-            type: { $ne: 'teaser' },
-            timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
-          });
+          // Per-user filtering
+          const meetsLiquidity = token.liquidity >= (userSettings.minLiquidity || 0);
+          const meetsHolders = (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100);
+          const meetsScore = alert.compositeScore >= (userSettings.minCompositeScore || 0);
 
-          if (!lastSent) {
-            // For expired users: send teaser Telegram then stop — don't add to alerts array
-            if (isExpired) {
-              if (hasTelegram && compositeScore >= 70) {
-                const { sendTeaserAlert } = await import('@/lib/telegram');
-                await sendTeaserAlert(alert, user.telegramChatId!, userId);
+          if (meetsLiquidity && meetsHolders && meetsScore) {
+            // Check if already sent to this specific user
+            const { getDatabase } = await import('@/lib/mongodb');
+            const db = await getDatabase();
+            const lastSent = await db.collection('sent_alerts').findOne({
+              userId: user._id.toString(),
+              mint: token.mint,
+              timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+            });
+
+            if (!lastSent) {
+              // Send Telegram if user has it enabled
+              if (userSettings.enableTelegramAlerts && user.telegramChatId) {
+                const { sendTelegramAlert } = await import('@/lib/telegram');
+                await sendTelegramAlert(alert, user.telegramChatId);
+
+                await db.collection('sent_alerts').insertOne({
+                  userId: user._id.toString(),
+                  mint: token.mint,
+                  symbol: token.symbol,
+                  type: 'alert',
+                  timestamp: new Date().toISOString()
+                });
+                sentAny = true;
               }
-              // Don't push to alerts for expired users — dashboard response is 403 below
-              continue;
             }
 
-            alerts.push(alert);
-            if (isValid) validCount++;
-
-            // Send Telegram if enabled FOR THIS USER
-            if (settings.enableTelegramAlerts && user.telegramChatId) {
-              const { sendTelegramAlert } = await import('@/lib/telegram');
-              await sendTelegramAlert(alert, user.telegramChatId);
-
-              await db.collection('sent_alerts').insertOne({
-                userId: userId,
-                mint: token.mint,
-                symbol: token.symbol,
-                type: 'alert',
-                timestamp: new Date().toISOString()
-              });
+            // For single-user dashboard mode, add to display array
+            if (!isMasterScan) {
+              alerts.push(alert);
             }
           }
         }
+
+        if (sentAny) validCount++;
       } catch (tokenError) {
         console.error(`Error validating token ${token.symbol}:`, tokenError);
       }
-    }
-
-    // Return 403 for expired users after running the teaser scan
-    if (isExpired) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'subscription_required',
-          message: 'Your 21-day free trial has ended. Subscribe to continue receiving alerts.',
-          scanned: scannedCount,
-        },
-        { status: 403 }
-      );
     }
 
     return NextResponse.json({
       success: true,
       scanned: scannedCount,
       valid: validCount,
-      alerts
+      alerts: isMasterScan ? [] : alerts,
+      isMasterScan
     });
 
   } catch (error) {

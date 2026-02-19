@@ -110,3 +110,18 @@ export async function getUserByTelegramChatId(chatId: string) {
     return await db.collection<User>('users').findOne({ telegramChatId: chatId });
 }
 
+export async function getAllActiveUsers(): Promise<User[]> {
+    const db = await getDatabase();
+    const now = new Date();
+    const trialPeriodMs = 21 * 24 * 60 * 60 * 1000;
+    const trialCutoffDate = new Date(now.getTime() - trialPeriodMs).toISOString();
+
+    return await db.collection<User>('users').find({
+        $or: [
+            // Active paid subscription
+            { subscriptionExpiresAt: { $gt: now.toISOString() } },
+            // Active free trial (less than 21 days old)
+            { createdAt: { $gt: trialCutoffDate } }
+        ]
+    }).toArray();
+}

@@ -53,7 +53,8 @@ export async function GET(request: NextRequest) {
     const scanResponse = await fetch(`${appUrl}/api/scan`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CRON_SECRET}`
       },
       body: JSON.stringify(settings)
     });
