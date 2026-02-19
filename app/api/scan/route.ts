@@ -8,6 +8,7 @@ import { BotSettings, EnhancedAlert } from '@/types';
 import { getUserById, hasActiveSubscription } from '@/lib/users';
 
 export async function POST(request: Request) {
+  const startTime = Date.now();
   try {
     const authHeader = request.headers.get('authorization');
     const isMasterScan = authHeader === `Bearer ${process.env.CRON_SECRET}`;
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
         minLiquidity: Number(process.env.MIN_LIQUIDITY_USD) || 50000,
         maxTopHolderPercent: Number(process.env.MAX_TOP_HOLDER_PERCENT) || 10,
         minVolumeIncrease: Number(process.env.MIN_VOLUME_INCREASE_PERCENT) || 200,
+        aiMode: 'balanced',
         ...bodySettings
       };
     } else {
@@ -62,13 +64,21 @@ export async function POST(request: Request) {
         minLiquidity: user.settings?.minLiquidity || 50000,
         maxTopHolderPercent: user.settings?.maxTopHolderPercent || 10,
         minVolumeIncrease: user.settings?.minVolumeIncrease || 200,
+        aiMode: user.settings?.aiMode || 'balanced',
         ...bodySettings
       };
     }
 
     // 1. Discover Tokens using Master Settings
     console.log(`Starting discovery scan with minVolume: ${masterSettings.minVolumeIncrease}%`);
-    const discoveredTokens = await scanDEXScreener(masterSettings.minVolumeIncrease);
+    let discoveredTokens = await scanDEXScreener(masterSettings.minVolumeIncrease);
+
+    // OPTIMIZATION: Limit discovery for Cron to ensure 10s completion
+    if (isMasterScan) {
+      discoveredTokens = discoveredTokens.slice(0, 5);
+      console.log(`Master Scan: Limited discovery to top ${discoveredTokens.length} tokens for performance`);
+    }
+
     console.log(`Discovered ${discoveredTokens.length} potential tokens`);
 
     const alerts: EnhancedAlert[] = [];
@@ -76,39 +86,43 @@ export async function POST(request: Request) {
     let validCount = 0;
 
     // 2. Validate each token
-    for (const token of discoveredTokens) {
-      scannedCount++;
-      try {
-        // Validate token ONCE with master settings for initial check
-        const alert = await createEnhancedAlert(token, masterSettings);
+    // OPTIMIZATION: Use parallel processing for Cron, sequential for User (to preserve UI logs)
+    if (isMasterScan) {
+      const { getDatabase } = await import('@/lib/mongodb');
+      const db = await getDatabase();
 
-        // Record if it fits ANY user criteria
-        let sentAny = false;
+      const validationPromises = discoveredTokens.map(async (token) => {
+        // Time guard: Don't start new validation if we're past 8.5 seconds
+        if (Date.now() - startTime > 8500) {
+          console.log('Master Scan: 8.5s threshold reached, skipping remaining tokens');
+          return null;
+        }
 
-        for (const user of usersToAlert) {
-          const userSettings = user.settings || masterSettings;
+        try {
+          scannedCount++;
+          // Skip AI analysis for Cron if we're running out of time (7s+)
+          const skipAI = (Date.now() - startTime > 7000);
+          const alert = await createEnhancedAlert(token, {
+            ...masterSettings,
+            aiMode: skipAI ? undefined : masterSettings.aiMode
+          });
 
-          // Per-user filtering
-          const meetsLiquidity = token.liquidity >= (userSettings.minLiquidity || 0);
-          const meetsHolders = (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100);
-          const meetsScore = alert.compositeScore >= (userSettings.minCompositeScore || 0);
+          let sentToAnyUser = false;
+          for (const user of usersToAlert) {
+            const userSettings = user.settings || masterSettings;
+            if (token.liquidity >= (userSettings.minLiquidity || 0) &&
+              (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100) &&
+              alert.compositeScore >= (userSettings.minCompositeScore || 0)) {
 
-          if (meetsLiquidity && meetsHolders && meetsScore) {
-            // Check if already sent to this specific user
-            const { getDatabase } = await import('@/lib/mongodb');
-            const db = await getDatabase();
-            const lastSent = await db.collection('sent_alerts').findOne({
-              userId: user._id.toString(),
-              mint: token.mint,
-              timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
-            });
+              const lastSent = await db.collection('sent_alerts').findOne({
+                userId: user._id.toString(),
+                mint: token.mint,
+                timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+              });
 
-            if (!lastSent) {
-              // Send Telegram if user has it enabled
-              if (userSettings.enableTelegramAlerts && user.telegramChatId) {
+              if (!lastSent && userSettings.enableTelegramAlerts && user.telegramChatId) {
                 const { sendTelegramAlert } = await import('@/lib/telegram');
                 await sendTelegramAlert(alert, user.telegramChatId);
-
                 await db.collection('sent_alerts').insertOne({
                   userId: user._id.toString(),
                   mint: token.mint,
@@ -116,20 +130,61 @@ export async function POST(request: Request) {
                   type: 'alert',
                   timestamp: new Date().toISOString()
                 });
-                sentAny = true;
+                sentToAnyUser = true;
               }
             }
+          }
+          if (sentToAnyUser) validCount++;
+          return true;
+        } catch (e) {
+          console.error(`Validation failed for ${token.symbol}:`, e);
+          return null;
+        }
+      });
 
-            // For single-user dashboard mode, add to display array
-            if (!isMasterScan) {
-              alerts.push(alert);
+      await Promise.all(validationPromises);
+    } else {
+      // SEQUENTIAL MODE FOR USER (Dashboard UI visibility)
+      for (const token of discoveredTokens) {
+        scannedCount++;
+        try {
+          const alert = await createEnhancedAlert(token, masterSettings);
+          const user = usersToAlert[0];
+          const userSettings = user.settings || masterSettings;
+
+          if (token.liquidity >= (userSettings.minLiquidity || 0) &&
+            (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100) &&
+            alert.compositeScore >= (userSettings.minCompositeScore || 0)) {
+
+            alerts.push(alert);
+            validCount++;
+
+            // Optional: User-triggered scans also send Telegram if enabled
+            if (userSettings.enableTelegramAlerts && user.telegramChatId) {
+              const { getDatabase } = await import('@/lib/mongodb');
+              const db = await getDatabase();
+              const lastSent = await db.collection('sent_alerts').findOne({
+                userId: user._id.toString(),
+                mint: token.mint,
+                timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+              });
+
+              if (!lastSent) {
+                const { sendTelegramAlert } = await import('@/lib/telegram');
+                await sendTelegramAlert(alert, user.telegramChatId);
+                await db.collection('sent_alerts').insertOne({
+                  userId: user._id.toString(),
+                  mint: token.mint,
+                  symbol: token.symbol,
+                  type: 'alert',
+                  timestamp: new Date().toISOString()
+                });
+              }
             }
           }
+        } catch (tokenError) {
+          console.error(`Error validating token ${token.symbol}:`, tokenError);
         }
-
-        if (sentAny) validCount++;
-      } catch (tokenError) {
-        console.error(`Error validating token ${token.symbol}:`, tokenError);
       }
     }
 
@@ -138,7 +193,8 @@ export async function POST(request: Request) {
       scanned: scannedCount,
       valid: validCount,
       alerts: isMasterScan ? [] : alerts,
-      isMasterScan
+      isMasterScan,
+      executionTime: `${Date.now() - startTime}ms`
     });
 
   } catch (error) {

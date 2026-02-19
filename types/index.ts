@@ -120,7 +120,7 @@ export interface BotSettings {
   minCompositeScore?: number;
   minSocialScore?: number;
   whaleOnly?: boolean;
-  aiMode: 'conservative' | 'balanced' | 'aggressive';
+  aiMode?: 'conservative' | 'balanced' | 'aggressive';
 }
 
 /**
