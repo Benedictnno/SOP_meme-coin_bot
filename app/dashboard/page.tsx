@@ -1,18 +1,15 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { EnhancedAlert, BotSettings } from '@/types';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { Activity, BarChart3, RefreshCw, Loader2, Play, Pause, Settings, X, Clock, Lock, Zap } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Activity, BarChart3, RefreshCw, RefreshCw as CycleIcon, Loader2 } from 'lucide-react';
 
-// New Components
-import { Header } from '@/components/dashboard/Header';
 import { MetricsBar } from '@/components/dashboard/MetricsBar';
 import { SettingsPanel } from '@/components/dashboard/SettingsPanel';
 import { AlertsView } from '@/components/dashboard/AlertsView';
 import { AnalyticsView } from '@/components/dashboard/AnalyticsView';
 import { PatternsView } from '@/components/dashboard/PatternsView';
-import { BottomNav } from '@/components/dashboard/BottomNav';
 
 interface PerformanceMetrics {
   totalAlerts: number;
@@ -41,6 +38,7 @@ export default function EnhancedAnalyticsDashboard() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<{ expiry: string | null; trialDaysLeft: number }>({ expiry: null, trialDaysLeft: 0 });
   const [telegramChatId, setTelegramChatId] = useState('');
+  const [subscriptionExpired, setSubscriptionExpired] = useState(false);
 
   const [settings, setSettings] = useState<BotSettings>({
     minLiquidity: 50000,
@@ -64,12 +62,7 @@ export default function EnhancedAnalyticsDashboard() {
     whaleSuccessRate: 0
   });
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    }
-  }, [status, router]);
+
 
   // Load from API
   useEffect(() => {
@@ -83,10 +76,22 @@ export default function EnhancedAnalyticsDashboard() {
           if (data.settings) setSettings(data.settings);
           if (data.telegramChatId) setTelegramChatId(data.telegramChatId);
 
+          // If trial was denied (IP abuse), redirect to subscribe immediately
+          if (data.trialDenied) {
+            router.push('/subscribe');
+            return;
+          }
+
           // Calculate trial
           const createdAt = new Date(data.createdAt);
           const trialExpiry = new Date(createdAt.getTime() + 21 * 24 * 60 * 60 * 1000);
           const trialDaysLeft = Math.max(0, Math.ceil((trialExpiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+          // Show paywall banner if trial has expired and no paid subscription
+          const hasActiveSub = data.subscriptionExpiresAt && new Date(data.subscriptionExpiresAt) > new Date();
+          if (trialDaysLeft === 0 && !hasActiveSub) {
+            setSubscriptionExpired(true);
+          }
 
           setSubscriptionInfo({
             expiry: data.subscriptionExpiresAt || null,
@@ -218,9 +223,9 @@ export default function EnhancedAnalyticsDashboard() {
 
         setLastScanTime(new Date());
       } else {
-        if (data.error === 'Subscription expired') {
+        if (data.error === 'subscription_required') {
+          setSubscriptionExpired(true);
           setIsRunning(false);
-          alert(data.message);
         }
         console.error('Scan API error:', data.error);
       }
@@ -254,7 +259,7 @@ export default function EnhancedAnalyticsDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans selection:bg-purple-500/30">
+    <>
       {/* Dynamic Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-purple-900/10 blur-[120px] rounded-full animate-pulse" />
@@ -263,16 +268,69 @@ export default function EnhancedAnalyticsDashboard() {
 
       <div className="relative z-10 max-w-[1600px] mx-auto px-6 py-8">
 
-        <Header
-          session={session}
-          isRunning={isRunning}
-          setIsRunning={setIsRunning}
-          showSettings={showSettings}
-          setShowSettings={setShowSettings}
-          lastScanTime={lastScanTime}
-          onClearData={() => { window.localStorage.removeItem('enhanced-alerts'); setAlerts([]); }}
-          onSignOut={() => signOut({ callbackUrl: '/login' })}
-        />
+        {/* ── Paywall Banner (expired users) ─────────────────────────────── */}
+        {subscriptionExpired && (
+          <div className="relative mb-6 rounded-2xl overflow-hidden border border-amber-500/30 bg-gradient-to-r from-amber-950/60 via-orange-950/40 to-amber-950/60">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(245,158,11,0.15),transparent_70%)]" />
+            <div className="relative flex flex-wrap items-center justify-between gap-4 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <Lock className="w-4 h-4 text-amber-400" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-400 mb-0.5">Free Trial Ended</div>
+                  <p className="text-[13px] text-amber-200/80">
+                    The scanner is still running and catching signals — but your access is locked.
+                    <span className="text-amber-300 font-bold"> You're missing live opportunities right now.</span>
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/subscribe"
+                className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-black rounded-full font-black text-[11px] uppercase tracking-widest hover:bg-amber-400 transition-all shadow-lg shadow-amber-500/30 animate-pulse"
+              >
+                <Zap className="w-3.5 h-3.5" /> Unlock Now
+              </a>
+            </div>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-black tracking-tighter uppercase italic">
+              SOP (Standard Operating Procedure) <span className="text-purple-500">Engine</span>
+            </h1>
+            {lastScanTime && (
+              <span className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {lastScanTime.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              id="tour-scan-btn"
+              onClick={() => setIsRunning(!isRunning)}
+              className={`px-6 py-2.5 rounded-full flex items-center gap-2 transition-all font-black text-[10px] uppercase tracking-[0.2em] shadow-xl ${isRunning
+                ? 'bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20'
+                : 'bg-purple-600 text-white hover:bg-purple-500 shadow-purple-600/20'
+                }`}
+            >
+              {isRunning ? <><Pause className="w-4 h-4 fill-current" /> Stop</> : <><Play className="w-4 h-4 fill-current" /> Initialize</>}
+            </button>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="w-10 h-10 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600 transition-all"
+            >
+              <Settings className={`w-5 h-5 ${showSettings ? 'rotate-90 text-purple-500' : ''} transition-all`} />
+            </button>
+            <button
+              onClick={() => { window.localStorage.removeItem('enhanced-alerts'); setAlerts([]); }}
+              className="w-10 h-10 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-red-500 transition-all"
+              title="Clear All Data"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
 
         {/* Navigation Tabs */}
         <div className="flex items-center gap-8 mb-8 border-b border-neutral-800/50">
@@ -304,14 +362,16 @@ export default function EnhancedAnalyticsDashboard() {
         )}
 
         {/* Metrics Bar */}
-        <MetricsBar
-          isRunning={isRunning}
-          scannedTokens={scannedTokens}
-          validatedTokens={validatedTokens}
-          avgCompositeScore={performanceMetrics.avgCompositeScore}
-          highScoreAlerts={performanceMetrics.highScoreAlerts}
-          bestHour={performanceMetrics.bestHour}
-        />
+        <div id="tour-metrics">
+          <MetricsBar
+            isRunning={isRunning}
+            scannedTokens={scannedTokens}
+            validatedTokens={validatedTokens}
+            avgCompositeScore={performanceMetrics.avgCompositeScore}
+            highScoreAlerts={performanceMetrics.highScoreAlerts}
+            bestHour={performanceMetrics.bestHour}
+          />
+        </div>
 
         {isScanning && (
           <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 mb-6 animate-pulse">
@@ -327,11 +387,53 @@ export default function EnhancedAnalyticsDashboard() {
 
         {/* View Selection */}
         {activeView === 'alerts' && (
-          <AlertsView
-            alerts={alerts}
-            selectedAlert={selectedAlert}
-            setSelectedAlert={setSelectedAlert}
-          />
+          <div id="tour-feed">
+            {subscriptionExpired ? (
+              /* ── Locked ghost cards (behavioral decay) ── */
+              <div className="space-y-3">
+                <div className="text-[11px] font-bold uppercase tracking-widest text-amber-500/70 flex items-center gap-2 mb-4">
+                  <Lock className="w-3.5 h-3.5" />
+                  {alerts.length > 0 ? `${alerts.length} signal${alerts.length !== 1 ? 's' : ''} locked — upgrade to unlock` : '3 live signals detected — upgrade to view'}
+                </div>
+                {[
+                  { score: '92', checks: '7/7', liq: '$180k', spike: '847%', label: '💎 DIAMOND' },
+                  { score: '78', checks: '6/7', liq: '$94k', spike: '412%', label: '🟡 HIGH' },
+                  { score: '71', checks: '6/7', liq: '$61k', spike: '318%', label: '🟡 HIGH' },
+                ].map((ghost, i) => (
+                  <div key={i} className="relative rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 overflow-hidden select-none">
+                    {/* Blur overlay */}
+                    <div className="absolute inset-0 backdrop-blur-[6px] bg-black/40 z-10 flex items-center justify-center rounded-xl">
+                      <a href="/subscribe" className="flex items-center gap-2 px-4 py-2 bg-amber-500/90 text-black rounded-full text-[11px] font-black uppercase tracking-widest hover:bg-amber-400 transition-all">
+                        <Lock className="w-3.5 h-3.5" /> Subscribe to View
+                      </a>
+                    </div>
+                    {/* Ghost content underneath */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-neutral-700" />
+                        <div>
+                          <div className="w-20 h-3 bg-neutral-700 rounded mb-1" />
+                          <div className="w-14 h-2.5 bg-neutral-800 rounded" />
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-black text-purple-400">α {ghost.score}/100 {ghost.label}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[11px] text-neutral-600">
+                      <div>✅ Checks: {ghost.checks}</div>
+                      <div>💰 {ghost.liq}</div>
+                      <div>📈 +{ghost.spike}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <AlertsView
+                alerts={alerts}
+                selectedAlert={selectedAlert}
+                setSelectedAlert={setSelectedAlert}
+              />
+            )}
+          </div>
         )}
 
         {activeView === 'analytics' && (
@@ -346,14 +448,6 @@ export default function EnhancedAnalyticsDashboard() {
           />
         )}
       </div>
-
-      <BottomNav
-        session={session}
-        isRunning={isRunning}
-        setIsRunning={setIsRunning}
-        showSettings={showSettings}
-        setShowSettings={setShowSettings}
-      />
-    </div >
+    </>
   );
 }

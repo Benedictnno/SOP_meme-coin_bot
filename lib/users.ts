@@ -12,6 +12,9 @@ export interface User {
     freeTrialStartedAt?: string;
     subscriptionExpiresAt?: string;
     createdAt: string;
+    onboardingCompleted?: boolean;
+    signupIp?: string;
+    trialDenied?: boolean;
     settings?: {
         minLiquidity: number;
         maxTopHolderPercent: number;
@@ -30,13 +33,16 @@ export async function getUserByEmail(email: string) {
     return await db.collection<User>('users').findOne({ email });
 }
 
-export async function createUser(email: string, passwordHash: string) {
+export async function createUser(email: string, passwordHash: string, signupIp?: string, trialDenied?: boolean) {
     const db = await getDatabase();
     const newUser: User = {
         email,
         password: passwordHash,
         role: 'user',
         createdAt: new Date().toISOString(),
+        onboardingCompleted: false,
+        signupIp: signupIp || undefined,
+        trialDenied: trialDenied || false,
         settings: {
             minLiquidity: 50000,
             maxTopHolderPercent: 10,

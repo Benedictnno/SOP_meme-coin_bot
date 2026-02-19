@@ -309,3 +309,81 @@ ${alert ? `*SOP Security Validation:*
     return false;
   }
 }
+
+/**
+ * Send a censored teaser alert to an expired user's Telegram
+ * Hides token details to entice upgrade — capped at 1 per 6h per user
+ */
+export async function sendTeaserAlert(
+  alert: EnhancedAlert,
+  chatId: string,
+  userId: string
+): Promise<boolean> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sop-memescanner.com';
+
+  if (!botToken || !chatId) return false;
+
+  try {
+    // Rate-limit: 1 teaser per 6 hours per user
+    const { getDatabase } = await import('@/lib/mongodb');
+    const db = await getDatabase();
+    const recentTeaser = await db.collection('sent_alerts').findOne({
+      userId,
+      type: 'teaser',
+      timestamp: { $gt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() }
+    });
+    if (recentTeaser) return false;
+
+    const scoreLabel = alert.compositeScore >= 85 ? '85-100 🟢 EXCEPTIONAL'
+      : alert.compositeScore >= 70 ? '70-84 🟡 HIGH'
+        : '50-69 🟠 MODERATE';
+
+    const message = `
+🚨 *SOP MEMESCANNER — SIGNAL DETECTED* 🚨
+
+⚠️ *Your free trial has ended.*
+The engine just caught a high-opportunity token — and you're missing it.
+
+*📊 Signal Overview*
+🎯 Alpha Score: *${scoreLabel}*
+🔍 Checks Passed: *${alert.passedChecks}/${alert.totalChecks}*
+💰 Liquidity: *$${(alert.token.liquidity / 1000).toFixed(0)}k+*
+📈 Volume Spike: *${alert.token.volumeIncrease.toFixed(0)}%+*
+
+🔒 *Token name, mint, buy links & AI analysis are locked.*
+
+👉 *[Unlock Full Access → Subscribe Now](${appUrl}/subscribe)*
+
+_Upgrade with SOL to resume all alerts immediately._
+    `.trim();
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${botToken}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true
+        })
+      }
+    );
+
+    if (response.ok) {
+      await db.collection('sent_alerts').insertOne({
+        userId,
+        type: 'teaser',
+        timestamp: new Date().toISOString()
+      });
+      console.log(`[Teaser] Sent expired-user teaser to chatId ${chatId}`);
+    }
+
+    return response.ok;
+  } catch (error) {
+    console.error('Failed to send teaser alert:', error);
+    return false;
+  }
+}

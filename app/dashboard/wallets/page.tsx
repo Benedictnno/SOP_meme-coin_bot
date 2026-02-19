@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
-import { Wallet, Plus, Trash2, History, Shield, TrendingUp, TrendingDown, ExternalLink, RefreshCw, CheckCircle2, XCircle, Search, ArrowRightLeft, Info, Activity } from 'lucide-react';
+import { Wallet, Plus, Trash2, History, TrendingUp, TrendingDown, ExternalLink, RefreshCw, Info, Activity, ArrowRightLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function WalletsPage() {
@@ -101,23 +101,7 @@ export default function WalletsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0a0a0c] text-white font-['Inter']">
-            {/* Header */}
-            <div className="border-b border-white/5 bg-[#0d0d0f]/80 backdrop-blur-md sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-                    <Link href="/dashboard" className="flex items-center space-x-3 group">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:scale-105 transition-transform font-bold text-xs ring-1 ring-white/20">SOP</div>
-                        <span className="font-['Space_Grotesk'] font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">Master the Trench</span>
-                    </Link>
-
-                    <div className="flex items-center space-x-6">
-                        <Link href="/dashboard" className="text-sm font-medium text-white/40 hover:text-white transition-colors">Dashboard</Link>
-                        <Link href="/search" className="text-sm font-medium text-white/40 hover:text-white transition-colors">Search</Link>
-                        <div className="text-sm font-medium text-purple-400">Wallets</div>
-                    </div>
-                </div>
-            </div>
-
+        <>
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     {/* Left Sidebar: Wallet Management */}
@@ -218,7 +202,6 @@ export default function WalletsPage() {
                                 <div className="space-y-6">
                                     {activity.map((item, idx) => (
                                         <div key={idx} className="relative pl-8 before:absolute before:left-[11px] before:top-8 before:bottom-[-24px] before:w-[2px] before:bg-white/5 last:before:hidden">
-                                            {/* Time Marker */}
                                             <div className="absolute left-0 top-1.5 w-[24px] h-[24px] rounded-full bg-[#1d1d23] border border-white/10 flex items-center justify-center z-10">
                                                 {item.type === 'buy' ? <TrendingUp className="w-3 h-3 text-green-500" /> : <TrendingDown className="w-3 h-3 text-red-500" />}
                                             </div>
@@ -236,7 +219,6 @@ export default function WalletsPage() {
                                                         </div>
                                                         <div className="text-lg font-['Space_Grotesk'] font-bold mt-1">
                                                             {item.type === 'buy' ? '+' : '-'}{(item.tokenAmount || 0).toLocaleString()} {item.tokenSymbol === 'UNKNOWN' ? '' : item.tokenSymbol}
-
                                                             <span className="text-white/20 text-sm ml-2">(${(item.solAmount || 0).toFixed(2)} SOL)</span>
                                                         </div>
                                                     </div>
@@ -245,7 +227,6 @@ export default function WalletsPage() {
                                                     </a>
                                                 </div>
 
-                                                {/* Token Validation Result */}
                                                 {item.validation ? (
                                                     <div className="mt-4 p-4 bg-[#0d0d10] border border-white/5 rounded-xl flex items-center justify-between group/val">
                                                         <div className="flex items-center space-x-4">
@@ -257,7 +238,7 @@ export default function WalletsPage() {
                                                                 <div className="text-[10px] text-white/30 truncate max-w-[200px]">{item.validation.recommendations[0]}</div>
                                                             </div>
                                                         </div>
-                                                        <Link href={`/search?q=${item.tokenMint}`} className="text-[10px] font-bold text-purple-400 hover:text-purple-300 transition-colors uppercase tracking-widest flex items-center space-x-1">
+                                                        <Link href={`/dashboard/search?q=${item.tokenMint}`} className="text-[10px] font-bold text-purple-400 hover:text-purple-300 transition-colors uppercase tracking-widest flex items-center space-x-1">
                                                             <span>Full Report</span>
                                                             <ArrowRightLeft className="w-2 h-2" />
                                                         </Link>
@@ -282,6 +263,6 @@ export default function WalletsPage() {
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/5 rounded-full blur-[120px]"></div>
                 <div className="absolute bottom-[10%] right-[-5%] w-[30%] h-[30%] bg-indigo-600/5 rounded-full blur-[100px]"></div>
             </div>
-        </div>
+        </>
     );
 }

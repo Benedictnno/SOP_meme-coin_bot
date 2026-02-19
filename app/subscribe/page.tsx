@@ -5,6 +5,7 @@ import { Shield, Zap, Check, ArrowRight, Loader2, Wallet } from 'lucide-react';
 
 export default function SubscribePage() {
     const router = useRouter();
+    const priceSol = process.env.NEXT_PUBLIC_SUBSCRIPTION_PRICE_SOL || '0.1';
     const [isVerifying, setIsVerifying] = useState(false);
     const [signature, setSignature] = useState('');
     const [error, setError] = useState('');
@@ -68,7 +69,7 @@ export default function SubscribePage() {
                             <div className="px-4 py-1 bg-purple-500 text-[10px] font-black uppercase tracking-widest rounded-full w-fit mb-6">Unlimited Access</div>
                             <h2 className="text-3xl font-black mb-2 uppercase italic">Alpha Pass</h2>
                             <div className="flex items-baseline gap-2 mb-8">
-                                <span className="text-5xl font-black tabular-nums">1.0</span>
+                                <span className="text-5xl font-black tabular-nums">{priceSol}</span>
                                 <span className="text-xl font-bold text-neutral-500 uppercase">SOL</span>
                                 <span className="text-neutral-600 font-bold">/ MONTH</span>
                             </div>
@@ -99,7 +100,7 @@ export default function SubscribePage() {
                                     {process.env.NEXT_PUBLIC_PAYMENT_RECIPIENT || '3G8jExX... (Connect to view)'}
                                 </div>
                                 <p className="text-[10px] text-neutral-500 italic leading-relaxed">
-                                    Send exactly 1.0 SOL to the address above. Once the transaction is confirmed, paste the signature below to activate your account.
+                                    Send exactly {priceSol} SOL to the address above. Once the transaction is confirmed, paste the signature below to activate your account.
                                 </p>
                             </div>
                         </div>

@@ -20,18 +20,31 @@ export const TokenChat: React.FC<TokenChatProps> = ({ token, isOpen, onClose, in
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const onUpdateMessagesRef = useRef(onUpdateMessages);
+    const prevMessageCountRef = useRef(messages.length);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
+    // Keep the callback ref up to date without triggering effects
     useEffect(() => {
-        scrollToBottom();
-        if (messages.length > 0) {
-            onUpdateMessages?.(messages);
+        onUpdateMessagesRef.current = onUpdateMessages;
+    }, [onUpdateMessages]);
+
+    // Scroll and persist only when messages actually change
+    useEffect(() => {
+        if (messages.length !== prevMessageCountRef.current) {
+            prevMessageCountRef.current = messages.length;
+            // Scroll to bottom using container scrollTop for stability
+            requestAnimationFrame(() => {
+                if (messagesContainerRef.current) {
+                    messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+                }
+            });
         }
-    }, [messages, onUpdateMessages]);
+        if (messages.length > 0) {
+            onUpdateMessagesRef.current?.(messages);
+        }
+    }, [messages]);
 
     useEffect(() => {
         if (isOpen && messages.length === 0) {
@@ -107,7 +120,7 @@ export const TokenChat: React.FC<TokenChatProps> = ({ token, isOpen, onClose, in
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#0a0a0c]">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#0a0a0c]">
                 {messages.map((msg, idx) => (
                     <div key={idx} className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-1 ${msg.role === 'user' ? 'bg-neutral-700' : 'bg-purple-600/20 text-purple-400'}`}>
@@ -131,8 +144,10 @@ export const TokenChat: React.FC<TokenChatProps> = ({ token, isOpen, onClose, in
                         <div className="w-6 h-6 rounded-full bg-purple-600/20 text-purple-400 flex items-center justify-center shrink-0 mt-1">
                             <Bot className="w-3.5 h-3.5" />
                         </div>
-                        <div className="bg-purple-900/5 border border-purple-500/5 rounded-2xl rounded-tl-sm p-3">
-                            <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                        <div className="bg-purple-900/5 border border-purple-500/5 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
+                            <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.2s' }} />
+                            <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '200ms', animationDuration: '1.2s' }} />
+                            <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '400ms', animationDuration: '1.2s' }} />
                         </div>
                     </div>
                 )}

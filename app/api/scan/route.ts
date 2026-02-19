@@ -30,22 +30,15 @@ export async function POST(request: Request) {
 
     // Check Subscription / Free Trial
     const isSubscribed = await hasActiveSubscription(user);
-    if (!isSubscribed) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Subscription expired',
-          message: 'Your 21-day free trial has expired. Please subscribe with SOL to continue.'
-        },
-        { status: 403 }
-      );
-    }
 
-    // Use user-specific settings if available, otherwise fallback to defaults or request body
+    // --- Behavioral Decay: expired users get a teaser scan, not a hard block ---
+    const isExpired = !isSubscribed;
+    const hasTelegram = !!(user.telegramChatId);
+
+    // Use user-specific settings if available
     const bodySettings = await request.json().catch(() => ({}));
     const settings: BotSettings = user.settings ? {
       ...user.settings,
-      // Merge with any temporary overrides from the dashboard if provided
       ...bodySettings
     } : {
       minLiquidity: 50000,
@@ -61,7 +54,7 @@ export async function POST(request: Request) {
     };
 
     // 1. Discover Tokens via DEX Screener
-    console.log(`Starting scan for ${user.email} (Target: ${settings.minVolumeIncrease}%)`);
+    console.log(`Starting scan for ${user.email} (expired=${isExpired})`);
     const discoveredTokens = await scanDEXScreener(settings.minVolumeIncrease);
     console.log(`Discovered ${discoveredTokens.length} potential tokens`);
 
@@ -74,11 +67,9 @@ export async function POST(request: Request) {
       scannedCount++;
 
       try {
-        // Run the enhanced SOP validation and alert creation
         const alert = await createEnhancedAlert(token, settings);
         const { isValid, compositeScore } = alert;
-        const validationResult = { checks: alert.checks, enhancements: { whaleActivity: alert.whaleActivity, txPatterns: { suspiciousPatterns: alert.risks.filter(r => r.includes('Pattern')) }, bundleAnalysis: alert.bundleAnalysis, devScore: alert.devScore } }; // Minimal shim for remaining logic
-
+        const validationResult = { checks: alert.checks, enhancements: { whaleActivity: alert.whaleActivity, txPatterns: { suspiciousPatterns: alert.risks.filter(r => r.includes('Pattern')) }, bundleAnalysis: alert.bundleAnalysis, devScore: alert.devScore } };
 
         if (alert.aiAnalysis) {
           console.log(`[AI Analysis Generated] for ${token.symbol}: ${alert.aiAnalysis.summary.substring(0, 50)}...`);
@@ -86,26 +77,34 @@ export async function POST(request: Request) {
           console.log(`[AI Analysis Missing] for ${token.symbol}`);
         }
 
-        // Filter and Deduplicate
         const passesWhaleFilter = !settings.whaleOnly || validationResult.enhancements.whaleActivity.involved;
 
         if (compositeScore >= (settings.minCompositeScore || 0) && passesWhaleFilter) {
-          // User-specific deduplication
           const { getDatabase } = await import('@/lib/mongodb');
           const db = await getDatabase();
           const lastSent = await db.collection('sent_alerts').findOne({
             userId: userId,
             mint: token.mint,
+            type: { $ne: 'teaser' },
             timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
           });
 
           if (!lastSent) {
+            // For expired users: send teaser Telegram then stop — don't add to alerts array
+            if (isExpired) {
+              if (hasTelegram && compositeScore >= 70) {
+                const { sendTeaserAlert } = await import('@/lib/telegram');
+                await sendTeaserAlert(alert, user.telegramChatId!, userId);
+              }
+              // Don't push to alerts for expired users — dashboard response is 403 below
+              continue;
+            }
+
             alerts.push(alert);
             if (isValid) validCount++;
 
             // Send Telegram if enabled FOR THIS USER
             if (settings.enableTelegramAlerts && user.telegramChatId) {
-              // We need to use the user's specific chat ID if it exists
               const { sendTelegramAlert } = await import('@/lib/telegram');
               await sendTelegramAlert(alert, user.telegramChatId);
 
@@ -113,6 +112,7 @@ export async function POST(request: Request) {
                 userId: userId,
                 mint: token.mint,
                 symbol: token.symbol,
+                type: 'alert',
                 timestamp: new Date().toISOString()
               });
             }
@@ -121,6 +121,19 @@ export async function POST(request: Request) {
       } catch (tokenError) {
         console.error(`Error validating token ${token.symbol}:`, tokenError);
       }
+    }
+
+    // Return 403 for expired users after running the teaser scan
+    if (isExpired) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'subscription_required',
+          message: 'Your 21-day free trial has ended. Subscribe to continue receiving alerts.',
+          scanned: scannedCount,
+        },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json({

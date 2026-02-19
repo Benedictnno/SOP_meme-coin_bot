@@ -56,23 +56,7 @@ function SearchContent() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0a0a0c] text-white font-['Inter']">
-            {/* Header */}
-            <div className="border-b border-white/5 bg-[#0d0d0f]/80 backdrop-blur-md sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-                    <Link href="/dashboard" className="flex items-center space-x-3 group">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:scale-105 transition-transform font-bold text-xs ring-1 ring-white/20">SOP</div>
-                        <span className="font-['Space_Grotesk'] font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">Master the Trench</span>
-                    </Link>
-
-                    <div className="flex items-center space-x-4">
-                        <Link href="/dashboard" className="text-sm font-medium text-white/60 hover:text-white transition-colors">Dashboard</Link>
-                        <div className="h-4 w-[1px] bg-white/10"></div>
-                        <div className="text-sm font-medium text-purple-400">Search</div>
-                    </div>
-                </div>
-            </div>
-
+        <>
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
                 {/* Hero Search Section */}
                 <div className="text-center mb-12">
@@ -146,7 +130,6 @@ function SearchContent() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
                         {results.map((alert, idx) => (
                             <div key={idx} className="group relative">
-                                {/* Glowing background for high composite scores */}
                                 {alert.compositeScore >= 80 && (
                                     <div className="absolute -inset-[1px] bg-gradient-to-r from-green-500/30 via-emerald-500/30 to-teal-500/30 rounded-3xl blur-md opacity-50 group-hover:opacity-100 transition-opacity"></div>
                                 )}
@@ -248,6 +231,7 @@ function SearchContent() {
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[120px]"></div>
                 <div className="absolute bottom-[10%] right-[-5%] w-[30%] h-[30%] bg-blue-600/10 rounded-full blur-[100px]"></div>
             </div>
+
             {chatToken && (
                 <TokenChat
                     token={chatToken}
@@ -257,14 +241,14 @@ function SearchContent() {
                     onUpdateMessages={(msgs) => setChatHistories(prev => ({ ...prev, [chatToken.mint]: msgs }))}
                 />
             )}
-        </div>
+        </>
     );
 }
 
 export default function SearchPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
+            <div className="flex items-center justify-center py-40">
                 <RefreshCw className="w-10 h-10 animate-spin text-purple-500" />
             </div>
         }>

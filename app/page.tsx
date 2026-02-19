@@ -9,9 +9,7 @@ export default function Home() {
       <nav className="fixed top-0 w-full z-50 glass-nav">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <span className="material-icons-round text-background-dark font-bold">security</span>
-            </div>
+            <img src="/sop-logo.svg" alt="SOP Logo" className="w-10 h-10 rounded-lg shadow-lg shadow-primary/20" />
             <span className="font-display text-2xl font-bold tracking-tight">SOP<span className="text-primary">SCANNER</span></span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/60">
@@ -383,9 +381,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center group">
-                <span className="material-icons-round text-background-dark text-sm font-bold group-hover:scale-110 transition-transform">security</span>
-              </div>
+              <img src="/sop-logo.svg" alt="SOP Logo" className="w-8 h-8 rounded group-hover:scale-110 transition-transform" />
               <span className="font-display font-bold tracking-tight uppercase">SOP<span className="text-primary">SCANNER</span></span>
             </div>
             <div className="flex gap-8 text-white/40 text-[10px] font-black uppercase tracking-widest">

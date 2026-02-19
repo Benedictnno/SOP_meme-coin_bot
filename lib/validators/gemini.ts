@@ -74,26 +74,50 @@ export async function analyzeTokenNarrative(
       }
     `;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        // Retry logic for rate limits (429)
+        const maxRetries = 3;
+        let lastError: any = null;
 
-        console.log(`[Gemini Response - ${mode}]:`, text.substring(0, 100) + '...');
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                const text = response.text();
 
-        // Clean up JSON response in case AI adds markdown blocks or extra text
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            console.error(`[Gemini Error]: No JSON found in response for ${token.symbol}. Text:`, text);
-            return null;
+                console.log(`[Gemini Response - ${mode}]:`, text.substring(0, 100) + '...');
+
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) {
+                    console.error(`[Gemini Error]: No JSON found in response for ${token.symbol}. Text:`, text);
+                    return null;
+                }
+
+                const parsed = JSON.parse(jsonMatch[0]) as AIAnalysis;
+
+                if (!parsed.summary || !parsed.potential) {
+                    console.warn(`[Gemini Warning]: Parsed response missing required fields for ${token.symbol}`);
+                }
+
+                return parsed;
+
+            } catch (err: any) {
+                lastError = err;
+                const is429 = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('Too Many Requests');
+
+                if (is429 && attempt < maxRetries - 1) {
+                    // Parse retry delay from error message, or use exponential backoff
+                    const retryMatch = err?.message?.match(/retry\s+in\s+([\d.]+)s/i);
+                    const waitSec = retryMatch ? parseFloat(retryMatch[1]) + 1 : Math.pow(2, attempt + 1) * 5;
+                    console.warn(`[Gemini] Rate limited (attempt ${attempt + 1}/${maxRetries}). Retrying in ${waitSec.toFixed(1)}s...`);
+                    await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
+                    continue;
+                }
+                throw err;
+            }
         }
 
-        const parsed = JSON.parse(jsonMatch[0]) as AIAnalysis;
-
-        if (!parsed.summary || !parsed.potential) {
-            console.warn(`[Gemini Warning]: Parsed response missing required fields for ${token.symbol}`);
-        }
-
-        return parsed;
+        console.error(`[Gemini] All ${maxRetries} attempts failed for ${token.symbol}`);
+        return null;
 
     } catch (error) {
         console.error(`Gemini AI analysis error (${mode} mode):`, error);

@@ -25,7 +25,9 @@ export async function GET() {
             settings: user.settings,
             telegramChatId: user.telegramChatId,
             subscriptionExpiresAt: user.subscriptionExpiresAt,
-            createdAt: user.createdAt
+            createdAt: user.createdAt,
+            onboardingCompleted: user.onboardingCompleted ?? false,
+            trialDenied: user.trialDenied ?? false
         });
 
     } catch (error) {
@@ -43,13 +45,35 @@ export async function POST(request: Request) {
         }
 
         const userId = (session.user as any).id;
-        const { settings, telegramChatId } = await request.json();
+        const { settings, telegramChatId, onboardingCompleted } = await request.json();
 
         const db = await getDatabase();
+
+        // --- Telegram Chat ID Uniqueness Check ---
+        if (telegramChatId) {
+            const now = new Date();
+            const trialPeriodMs = 21 * 24 * 60 * 60 * 1000;
+            const existing = await db.collection('users').findOne({
+                telegramChatId,
+                _id: { $ne: new ObjectId(userId) } // not this user
+            });
+            if (existing) {
+                const existingCreatedAt = new Date(existing.createdAt);
+                const existingTrialExpiry = new Date(existingCreatedAt.getTime() + trialPeriodMs);
+                const isExpired = existingTrialExpiry < now && !existing.subscriptionExpiresAt;
+                if (isExpired) {
+                    return NextResponse.json({
+                        success: false,
+                        message: 'This Telegram account is already linked to another SOP account.'
+                    }, { status: 400 });
+                }
+            }
+        }
 
         const updateData: any = {};
         if (settings) updateData.settings = settings;
         if (telegramChatId) updateData.telegramChatId = telegramChatId;
+        if (onboardingCompleted !== undefined) updateData.onboardingCompleted = onboardingCompleted;
 
         await db.collection("users").updateOne(
             { _id: new ObjectId(userId) },

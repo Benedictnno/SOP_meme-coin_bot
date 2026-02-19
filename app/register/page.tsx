@@ -46,9 +46,7 @@ export default function RegisterPage() {
 
             <div className="w-full max-w-md relative z-10">
                 <div className="flex flex-col items-center mb-10">
-                    <div className="w-16 h-16 bg-neutral-900 border border-neutral-800 rounded-2xl flex items-center justify-center mb-6 shadow-2xl">
-                        <Shield className="w-8 h-8 text-purple-500" />
-                    </div>
+                    <img src="/sop-logo.svg" alt="SOP Logo" className="w-16 h-16 rounded-2xl shadow-2xl mb-6 border border-neutral-800" />
                     <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Master the Trench</h1>
                     <p className="text-neutral-500 text-sm font-medium">Join 2,500+ elite traders detecting rugs early.</p>
                 </div>

@@ -19,12 +19,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 }) => {
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-t border-neutral-800 p-4 md:hidden flex justify-around items-center pb-6 safe-area-bottom">
-            <Link href="/search" className="flex flex-col items-center gap-1 text-neutral-400 hover:text-white transition-colors">
+            <Link href="/dashboard/search" className="flex flex-col items-center gap-1 text-neutral-400 hover:text-white transition-colors">
                 <Search className="w-6 h-6" />
                 <span className="text-[10px] font-bold uppercase tracking-wide">Search</span>
             </Link>
 
-            <Link href="/wallets" className="flex flex-col items-center gap-1 text-neutral-400 hover:text-white transition-colors">
+            <Link href="/dashboard/wallets" className="flex flex-col items-center gap-1 text-neutral-400 hover:text-white transition-colors">
                 <Wallet className="w-6 h-6" />
                 <span className="text-[10px] font-bold uppercase tracking-wide">Wallets</span>
             </Link>

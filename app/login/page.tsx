@@ -50,9 +50,7 @@ function LoginContent() {
     return (
         <div className="w-full max-w-md relative z-10">
             <div className="flex flex-col items-center mb-10">
-                <div className="w-16 h-16 bg-neutral-900 border border-neutral-800 rounded-2xl flex items-center justify-center mb-6 shadow-2xl">
-                    <Zap className="w-8 h-8 text-blue-500" />
-                </div>
+                <img src="/sop-logo.svg" alt="SOP Logo" className="w-16 h-16 rounded-2xl shadow-2xl mb-6 border border-neutral-800" />
                 <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Welcome Back</h1>
                 <p className="text-neutral-500 text-sm font-medium">Continue your hunt for the next 100x moonshot.</p>
             </div>
