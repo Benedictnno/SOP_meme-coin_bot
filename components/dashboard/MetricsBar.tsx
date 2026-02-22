@@ -25,8 +25,9 @@ export const MetricsBar: React.FC<MetricsBarProps> = ({
                     Status <Info className="w-2.5 h-2.5 opacity-50" />
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-neutral-600'}`} />
-                    <span className="text-xs font-semibold uppercase tracking-tight">{isRunning ? 'Active' : 'Standby'}</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+                    <span className="text-xs font-semibold uppercase tracking-tight">Sniper Active</span>
+                    {isRunning && <span className="ml-2 text-[8px] font-black text-purple-500 animate-pulse uppercase tracking-widest border border-purple-500/30 px-1 rounded">Deep Pulse</span>}
                 </div>
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-3 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                     <div className="text-[9px] font-black uppercase tracking-widest text-purple-500 mb-1">Node Status</div>

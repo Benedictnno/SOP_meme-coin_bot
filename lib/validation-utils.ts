@@ -54,7 +54,7 @@ export async function createEnhancedAlert(
         }
     }
 
-    return {
+    const alert: EnhancedAlert = {
         id: `alert-${token.mint}-${Date.now()}`,
         timestamp: new Date().toISOString(),
         token,
@@ -72,6 +72,24 @@ export async function createEnhancedAlert(
         risks: validationResult.risks,
         devScore: validationResult.enhancements.devScore || undefined,
         bundleAnalysis: validationResult.enhancements.bundleAnalysis,
-        aiAnalysis: validationResult.enhancements.aiAnalysis ? { ...validationResult.enhancements.aiAnalysis, mode: settings.aiMode } : undefined
+        aiAnalysis: validationResult.enhancements.aiAnalysis ? { ...validationResult.enhancements.aiAnalysis, mode: settings.aiMode } : undefined,
+        tierReached: validationResult.tierReached
     };
+
+    // Persistence: Save to database if valid (background workers can fill the dashboard)
+    if (isValid) {
+        try {
+            const { getDatabase } = await import('@/lib/mongodb');
+            const db = await getDatabase();
+            await db.collection('signals').updateOne(
+                { 'token.mint': token.mint },
+                { $set: alert },
+                { upsert: true }
+            );
+        } catch (dbError) {
+            console.error('[Persistence] Failed to save signal:', dbError);
+        }
+    }
+
+    return alert;
 }

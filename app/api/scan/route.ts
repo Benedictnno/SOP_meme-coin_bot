@@ -73,12 +73,7 @@ export async function POST(request: Request) {
     console.log(`Starting discovery scan with minVolume: ${masterSettings.minVolumeIncrease}%`);
     let discoveredTokens = await scanDEXScreener(masterSettings.minVolumeIncrease);
 
-    // OPTIMIZATION: Limit discovery for Cron to ensure 10s completion
-    if (isMasterScan) {
-      discoveredTokens = discoveredTokens.slice(0, 5);
-      console.log(`Master Scan: Limited discovery to top ${discoveredTokens.length} tokens for performance`);
-    }
-
+    // OPTIMIZATION: We no longer limit to 5, we use Tier 1 to filter fast
     console.log(`Discovered ${discoveredTokens.length} potential tokens`);
 
     const alerts: EnhancedAlert[] = [];
@@ -86,7 +81,7 @@ export async function POST(request: Request) {
     let validCount = 0;
 
     // 2. Validate each token
-    // OPTIMIZATION: Use parallel processing for Cron, sequential for User (to preserve UI logs)
+    // OPTIMIZATION: Use Tier 1 Fast-Filter for Master Scan
     if (isMasterScan) {
       const { getDatabase } = await import('@/lib/mongodb');
       const db = await getDatabase();

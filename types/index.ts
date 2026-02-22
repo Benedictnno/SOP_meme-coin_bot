@@ -104,6 +104,18 @@ export interface EnhancedAlert {
     potential: string;
     mode?: string;
   };
+  tierReached: number; // 1, 2, or 3
+}
+
+/**
+ * Validation result for tiered execution
+ */
+export interface TieredValidationResult {
+  success: boolean;
+  tierReached: number;
+  failedTier?: number;
+  reason?: string;
+  data?: any;
 }
 
 /**

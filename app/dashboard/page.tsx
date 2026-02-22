@@ -236,6 +236,42 @@ export default function EnhancedAnalyticsDashboard() {
     }
   };
 
+  const fetchSignals = async () => {
+    try {
+      const response = await fetch('/api/signals');
+      const data = await response.json();
+      if (data.success && data.alerts) {
+        setAlerts(prev => {
+          const alertMap = new Map(prev.map(a => [a.token.mint, a]));
+          data.alerts.forEach((newAlert: EnhancedAlert) => {
+            alertMap.set(newAlert.token.mint, newAlert);
+          });
+          return Array.from(alertMap.values())
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 100);
+        });
+
+        // Update counts based on historical data
+        const totalValid = data.alerts.filter((a: any) => a.isValid).length;
+        setValidatedTokens(prev => Math.max(prev, totalValid));
+        setScannedTokens(prev => Math.max(prev, data.alerts.length));
+      }
+    } catch (error) {
+      console.error('Failed to fetch signals:', error);
+    }
+  };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (status === 'authenticated') {
+      fetchSignals(); // Initial fetch
+      interval = setInterval(fetchSignals, 30000); // Poll every 30s as fallback for Pusher
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [status]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) {
@@ -297,8 +333,12 @@ export default function EnhancedAnalyticsDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-black tracking-tighter uppercase italic">
-              SOP (Standard Operating Procedure) <span className="text-purple-500">Engine</span>
+              SOP <span className="text-purple-500">Sniper</span>
             </h1>
+            <div className="flex items-center gap-2 px-2 py-1 rounded bg-green-500/10 border border-green-500/20">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[9px] font-black text-green-500 uppercase tracking-widest">Sniper Operational</span>
+            </div>
             {lastScanTime && (
               <span className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest flex items-center gap-1">
                 <Clock className="w-3 h-3" /> {lastScanTime.toLocaleTimeString()}
@@ -314,7 +354,7 @@ export default function EnhancedAnalyticsDashboard() {
                 : 'bg-purple-600 text-white hover:bg-purple-500 shadow-purple-600/20'
                 }`}
             >
-              {isRunning ? <><Pause className="w-4 h-4 fill-current" /> Stop</> : <><Play className="w-4 h-4 fill-current" /> Initialize</>}
+              {isRunning ? <><Pause className="w-4 h-4 fill-current" /> Stop Scan</> : <><Play className="w-4 h-4 fill-current" /> Deep Scan</>}
             </button>
             <button
               onClick={() => setShowSettings(!showSettings)}

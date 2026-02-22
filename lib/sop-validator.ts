@@ -397,12 +397,53 @@ export function scoreSocialSignals(socials?: TokenData['socials']): {
     return {
         overallScore: score,
         sentiment: score > 60 ? 'bullish' : score > 35 ? 'neutral' : 'weak',
-        twitterMentions: socials.twitter ? Math.floor(Math.random() * 50) + 5 : 0
+        twitterMentions: socials?.twitter ? Math.floor(Math.random() * 50) + 5 : 0
     };
 }
 
 /**
- * ENHANCED VALIDATION WITH ALL FIXES
+ * ENHANCEMENT 6: Fast On-Chain Security Check (Tier 1)
+ * Uses RPC to check for immediate red flags without API delays
+ */
+export async function checkQuickOnChainSecurity(mint: string): Promise<{
+    safe: boolean;
+    risks: string[];
+}> {
+    try {
+        const rpcUrl = process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL;
+        if (!rpcUrl) return { safe: true, risks: [] };
+
+        const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 'get-account-info',
+                method: 'getAccountInfo',
+                params: [mint, { encoding: 'jsonParsed' }]
+            })
+        });
+
+        const data = await response.json();
+        const accountData = data.result?.value?.data?.parsed?.info;
+
+        if (!accountData) return { safe: true, risks: [] };
+
+        const risks: string[] = [];
+        if (accountData.mintAuthority) risks.push('Mint authority present');
+        if (accountData.freezeAuthority) risks.push('Freeze authority present');
+
+        return {
+            safe: risks.length === 0,
+            risks
+        };
+    } catch (error) {
+        return { safe: true, risks: [] }; // Fail open
+    }
+}
+
+/**
+ * ENHANCED VALIDATION WITH TIERED EXECUTION
  */
 export async function validateTokenEnhanced(
     token: TokenData,
@@ -411,6 +452,7 @@ export async function validateTokenEnhanced(
     checks: ValidationChecks;
     rugCheckScore: number;
     risks: string[];
+    tierReached: number;
     enhancements: {
         freshness: { isFresh: boolean; ageMinutes: number };
         txPatterns: { isOrganic: boolean; suspiciousPatterns: string[] };
@@ -424,86 +466,136 @@ export async function validateTokenEnhanced(
         aiAnalysis: AIAnalysis | null;
     };
 }> {
+    console.log(`[Tiered Validation] Starting for: ${token.symbol}`);
 
-    console.log(`Enhanced validation for: ${token.symbol} (${token.mint})`);
+    // --- TIER 1: FAST FILTER (On-Chain & Context) ---
+    const tier1StartTime = Date.now();
+    const [freshness, marketContext, quickSecurity] = await Promise.all([
+        checkTokenFreshness(token.mint),
+        checkMarketContext(),
+        checkQuickOnChainSecurity(token.mint)
+    ]);
 
-    // Run all checks in parallel
-    const [
-        contractCheck,
-        sellTest,
-        holderData,
+    const tier1Passed = freshness.isFresh && marketContext.shouldTrade && quickSecurity.safe;
+
+    // Default values for skipping tiers
+    const defaultEnhancements = {
         freshness,
-        txPatterns,
-        liquidityStability,
+        txPatterns: { isOrganic: true, suspiciousPatterns: [] },
+        liquidityStability: { isStable: true, liquidityChange: 0 },
         marketContext,
-        whaleActivity,
-        creatorAddress
-    ] = await Promise.all([
+        narrativeQuality: { score: 50, signals: [], warnings: [] },
+        socialSignals: { overallScore: 50, sentiment: 'neutral', twitterMentions: 0 },
+        whaleActivity: { involved: false, confidence: 0, score: 50 },
+        devScore: null,
+        bundleAnalysis: { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: [] },
+        aiAnalysis: null
+    };
+
+    const defaultChecks: ValidationChecks = {
+        narrative: true,
+        attention: token.volumeIncrease > settings.minVolumeIncrease,
+        liquidity: token.liquidity > settings.minLiquidity,
+        volume: true,
+        contract: quickSecurity.safe,
+        holders: true,
+        sellTest: true
+    };
+
+    if (!tier1Passed) {
+        console.log(`[Tier 1 FAILED] ${token.symbol} - Skipping further tiers`);
+        return {
+            checks: { ...defaultChecks, contract: quickSecurity.safe },
+            rugCheckScore: quickSecurity.safe ? 50 : 0,
+            risks: [...quickSecurity.risks, ...(freshness.isFresh ? [] : ['Token too old']), ...(marketContext.shouldTrade ? [] : ['Bad market context'])],
+            tierReached: 1,
+            enhancements: defaultEnhancements
+        };
+    }
+    console.log(`[Tier 1 PASSED] in ${Date.now() - tier1StartTime}ms`);
+
+    // --- TIER 2: SECURITY & PATTERNS ---
+    const tier2StartTime = Date.now();
+    const [contractCheck, sellTest, holderData, txPatterns, bundleAnalysis, liquidityStability] = await Promise.all([
         validateContract(token.mint),
         testSellability(token.mint),
         getHolderDistribution(token.mint),
-        checkTokenFreshness(token.mint),
         analyzeTransactionPatterns(token.mint),
-        checkLiquidityStability(token.mint, token.liquidity),
-        checkMarketContext(),
-        getWhaleActivity(token.mint),
-        getTokenCreator(token.mint)
-    ]);
-
-    // Secondary checks based on results
-    const [devScore, bundleAnalysis, aiAnalysis] = await Promise.all([
-        creatorAddress ? getDeveloperCreditScore(creatorAddress) : Promise.resolve(null),
         detectBundledLaunch(token.mint),
-        analyzeTokenNarrative(token, settings.aiMode)
+        checkLiquidityStability(token.mint, token.liquidity)
     ]);
 
-    // Narrative & Social scoring (synchronous)
-    const narrativeQuality = scoreNarrative(token.narrative, token.symbol, token.socials);
+    const tier2Passed = contractCheck.verified && sellTest.canSell && (holderData.topHolderPercent < settings.maxTopHolderPercent) && !bundleAnalysis.isBundled;
+
+    if (!tier2Passed) {
+        console.log(`[Tier 2 FAILED] ${token.symbol} - Skipping Tier 3`);
+        return {
+            checks: {
+                ...defaultChecks,
+                contract: contractCheck.verified,
+                sellTest: sellTest.canSell,
+                holders: holderData.topHolderPercent < settings.maxTopHolderPercent,
+                narrative: true, // Placeholder
+            },
+            rugCheckScore: contractCheck.score,
+            risks: [...contractCheck.risks, ...txPatterns.suspiciousPatterns, ...(bundleAnalysis.isBundled ? ['Bundled Launch'] : []), ...(liquidityStability.warning ? [liquidityStability.warning] : [])],
+            tierReached: 2,
+            enhancements: {
+                ...defaultEnhancements,
+                txPatterns,
+                bundleAnalysis,
+                liquidityStability
+            }
+        };
+    }
+    console.log(`[Tier 2 PASSED] in ${Date.now() - tier2StartTime}ms`);
+
+    // --- TIER 3: ALPHA & AI ---
+    const tier3StartTime = Date.now();
+    const creatorAddress = await getTokenCreator(token.mint);
+
+    // Check if it's a Pump.fun token
+    const isPumpFun = token.narrative.toLowerCase().includes('pump.fun') ||
+        (token.pairAddress === undefined && token.liquidity < 100000);
+
+    const [devScore, aiAnalysis, whaleActivity, pumpData] = await Promise.all([
+        creatorAddress ? getDeveloperCreditScore(creatorAddress) : Promise.resolve(null),
+        analyzeTokenNarrative(token, settings.aiMode),
+        getWhaleActivity(token.mint),
+        isPumpFun ? import('./validators/pump-tracker').then(m => m.analyzePumpFunToken(token.mint)) : Promise.resolve(null)
+    ]);
+
+    let narrativeQuality = scoreNarrative(token.narrative, token.symbol, token.socials);
+
+    // Inject Pump.fun data into narrative if it's a moonshot potential
+    if (pumpData && pumpData.bondingProgress > 0) {
+        const { enhanceWithPumpData } = await import('./validators/pump-tracker');
+        token.narrative = enhanceWithPumpData(token, pumpData.bondingProgress).narrative || token.narrative;
+        narrativeQuality = scoreNarrative(token.narrative, token.symbol, token.socials); // Re-score
+    }
+
     const socialSignals = scoreSocialSignals(token.socials);
 
-    // Update token with holder data
-    token.topHolderPercent = holderData.topHolderPercent;
-
-    // Build enhanced validation checks
-    const checks: ValidationChecks = {
-        // Original checks
-        narrative: narrativeQuality.score > 40, // Enhanced with scoring
-        attention: token.volumeIncrease > settings.minVolumeIncrease,
-        liquidity: token.liquidity > settings.minLiquidity,
-        volume: token.volumeIncrease > 150 && token.volumeIncrease < 10000,
-        contract: contractCheck.verified && contractCheck.risks.length === 0,
-        holders: holderData.topHolderPercent < settings.maxTopHolderPercent,
-        sellTest: sellTest.canSell
-    };
-
-    // Additional validation gates
-    const enhancedChecks = {
-        isFresh: freshness.isFresh,
-        isOrganic: txPatterns.isOrganic,
-        liquidityStable: liquidityStability.isStable,
-        marketSafe: marketContext.shouldTrade
-    };
-
-    // Log enhancement results
-    console.log('Enhancement checks:', {
-        freshness: freshness.isFresh ? '✓' : `✗ (${freshness.ageMinutes}min old)`,
-        organic: txPatterns.isOrganic ? '✓' : `✗ (${txPatterns.suspiciousPatterns.join(', ')})`,
-        liquidity: liquidityStability.isStable ? '✓' : `✗ (${liquidityStability.warning})`,
-        market: marketContext.shouldTrade ? '✓' : `✗ (SOL ${marketContext.solTrend})`,
-        narrative: `${narrativeQuality.score}/100`
-    });
+    console.log(`[Tier 3 COMPLETE] in ${Date.now() - tier3StartTime}ms`);
 
     return {
-        checks,
+        checks: {
+            narrative: narrativeQuality.score > 40,
+            attention: token.volumeIncrease > settings.minVolumeIncrease,
+            liquidity: token.liquidity > settings.minLiquidity,
+            volume: txPatterns.isOrganic,
+            contract: contractCheck.verified,
+            holders: holderData.topHolderPercent < settings.maxTopHolderPercent,
+            sellTest: sellTest.canSell
+        },
         rugCheckScore: contractCheck.score,
         risks: [
             ...contractCheck.risks,
-            ...(freshness.isFresh ? [] : [`Token is ${freshness.ageMinutes} minutes old (>120min)`]),
             ...txPatterns.suspiciousPatterns,
             ...(liquidityStability.warning ? [liquidityStability.warning] : []),
-            ...(marketContext.shouldTrade ? [] : [`Unfavorable market (SOL ${marketContext.solTrend})`]),
             ...narrativeQuality.warnings
         ],
+        tierReached: 3,
         enhancements: {
             freshness,
             txPatterns,

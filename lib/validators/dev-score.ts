@@ -103,16 +103,24 @@ export async function getDeveloperCreditScore(creatorAddress: string): Promise<{
         // In a real app, we'd check the current state of those tokens
         // For now, let's just check the number of tokens
 
+        let reputation: 'High' | 'Medium' | 'Low' | 'New' = 'New';
         if (tokenCount > 10) {
             details.push(`Serial developer: ${tokenCount} previous launches`);
-        } else if (tokenCount > 0) {
+            reputation = 'High';
+            score += 30;
+        } else if (tokenCount > 3) {
             details.push(`Experienced developer: ${tokenCount} previous launches`);
+            reputation = 'Medium';
+            score += 15;
+        } else if (tokenCount > 0) {
+            details.push(`New developer: ${tokenCount} previous launch`);
+            reputation = 'Low';
+            score += 5;
+        } else {
+            details.push('Brand new developer wallet - High Risk');
+            reputation = 'New';
+            score -= 10;
         }
-
-        let reputation: 'High' | 'Medium' | 'Low' | 'New' = 'New';
-        if (tokenCount > 5) reputation = 'High';
-        else if (tokenCount > 1) reputation = 'Medium';
-        else reputation = 'Low';
 
         // Cap score
         score = Math.max(0, Math.min(100, score));
