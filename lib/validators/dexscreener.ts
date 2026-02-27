@@ -101,11 +101,21 @@ export async function scanDEXScreener(volumeThreshold: number = 200): Promise<To
 
         console.log(`[PASS] ${pair.baseToken.symbol}: Spike ${volumeChange.toFixed(0)}%, Liq $${liquidity.toFixed(0)}`);
         return true;
-      })
-      .slice(0, 10);
+      });
+
+    // ENHANCEMENT: Shuffle the spike tokens to avoid scanning the same 10 every time
+    // using Fisher-Yates shuffle for true randomness
+    for (let i = spikeTokens.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [spikeTokens[i], spikeTokens[j]] = [spikeTokens[j], spikeTokens[i]];
+    }
+
+    const selectedTokens = spikeTokens.slice(0, 20);
+
+    console.log(`[Discovery] Filtered ${spikeTokens.length} spikes, selected ${selectedTokens.length} shuffled candidates for validation`);
 
     // Transform to TokenData format
-    return spikeTokens.map((pair: DexPair): TokenData => {
+    return selectedTokens.map((pair: DexPair): TokenData => {
       const volumeChange = pair.volume.h24 > 0
         ? ((pair.volume.h1 * 24) / pair.volume.h24) * 100
         : 0;

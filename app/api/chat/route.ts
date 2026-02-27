@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { chatWithGroq } from '@/lib/validators/groq_fallback';
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
 export async function POST(request: Request) {
     try {
@@ -13,20 +14,24 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: 'AI configuration missing. Please check API keys.' }, { status: 500 });
         }
 
+        if (!tokenContext) {
+            return NextResponse.json({ message: 'Token context is missing. Refresh the page and try again.' }, { status: 400 });
+        }
+
         const lastUserMessage = messages[messages.length - 1].content;
 
         // Construct System Context
         const systemContext = `
         You are an expert crypto analyst AI within the "SOP MemeScanner" dashboard.
-        You are analyzing the token: ${tokenContext.name} ($${tokenContext.symbol}).
+        You are analyzing the token: ${tokenContext.name || 'Unknown'} ($${tokenContext.symbol || '???'}).
         
         TOKEN CONTEXT:
-        - Mint Address: ${tokenContext.mint}
+        - Mint Address: ${tokenContext.mint || 'Unknown'}
         - Price: $${tokenContext.priceUSD || 'Unknown'}
-        - Liquidity: $${(tokenContext.liquidity / 1000).toFixed(1)}k
-        - Market Cap: $${(tokenContext.marketCap / 1000).toFixed(1)}k
-        - Volume Increase: ${tokenContext.volumeIncrease}%
-        - Top Holder %: ${tokenContext.topHolderPercent}%
+        - Liquidity: $${((tokenContext.liquidity || 0) / 1000).toFixed(1)}k
+        - Market Cap: $${((tokenContext.marketCap || 0) / 1000).toFixed(1)}k
+        - Volume Increase: ${tokenContext.volumeIncrease || 0}%
+        - Top Holder %: ${tokenContext.topHolderPercent || 0}%
         
         SECURITY:
         - Mint Authority: ${tokenContext.mintAuthority ? '⚠️ Present (Risk)' : '✅ Revoked'}
@@ -34,7 +39,7 @@ export async function POST(request: Request) {
         - LP Burned: ${tokenContext.lpBurned ? '✅ Yes' : '⚠️ No'}
         
         LINKS:
-        - DexScreener: https://dexscreener.com/solana/${tokenContext.mint}
+        - DexScreener: https://dexscreener.com/solana/${tokenContext.mint || ''}
         
         INSTRUCTIONS:
         - Answer the user's question specifically about this token.
@@ -78,7 +83,11 @@ export async function POST(request: Request) {
                 const is429 = status === 429 || errorMessage.includes('429') || errorMessage.includes('Too Many Requests');
 
                 if (isQuotaExceeded) {
-                    console.error('[Chat API] Daily quota exhausted');
+                    console.error('[Chat API] Daily quota exhausted. Attempting Groqd fallback...');
+                    const groqResponse = await chatWithGroq(messages, systemContext);
+                    if (groqResponse) {
+                        return NextResponse.json({ message: groqResponse });
+                    }
                     return NextResponse.json({
                         message: 'Daily AI analysis limit reached (Free Tier). Please try again tomorrow or upgrade your plan.'
                     }, { status: 429 });
@@ -86,7 +95,6 @@ export async function POST(request: Request) {
 
                 if (is429 && attempt < maxRetries - 1) {
                     const retryMatch = errorMessage.match(/retry\s+in\s+([\d.]+)s/i);
-                    // Cap wait time to 10s to avoid server timeouts
                     const waitSec = Math.min(retryMatch ? parseFloat(retryMatch[1]) + 1 : Math.pow(2, attempt + 1) * 2, 10);
 
                     console.warn(`[Chat API] Rate limited (attempt ${attempt + 1}/${maxRetries}). Retrying in ${waitSec.toFixed(1)}s...`);
@@ -94,8 +102,13 @@ export async function POST(request: Request) {
                     continue;
                 }
 
-                // If it's a 429 but we're out of retries
+                // If it's a 429 and we're out of retries, try Groq one last time
                 if (is429) {
+                    console.log('[Chat API] Gemini busy. Attempting Groq chat fallback...');
+                    const groqResponse = await chatWithGroq(messages, systemContext);
+                    if (groqResponse) {
+                        return NextResponse.json({ message: groqResponse });
+                    }
                     return NextResponse.json({
                         message: 'The AI is currently busy handling many requests. Please wait a moment and try again.'
                     }, { status: 429 });
@@ -105,7 +118,22 @@ export async function POST(request: Request) {
             }
         }
 
-        return NextResponse.json({ message: 'AI service temporarily unavailable. Please try again later.' }, { status: 503 });
+        console.error(`[Chat API] All ${maxRetries} attempts failed`);
+
+        // --- FALLBACK TO GROQ ---
+        if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'YOUR_GROQ_API_KEY') {
+            console.log('[EXECUTION]: Gemini failed. Attempting Groq chat fallback...');
+            const groqResponse = await chatWithGroq(messages, systemContext);
+            if (groqResponse) {
+                return NextResponse.json({ message: groqResponse });
+            }
+        }
+
+        return NextResponse.json(
+            { error: 'AI is currently unavailable. Please try again later.' },
+            { status: 503 }
+        );
+
     } catch (error: any) {
         console.error('Chat API Error:', error);
         const status = error?.status === 429 ? 429 : 500;

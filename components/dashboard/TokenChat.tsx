@@ -96,7 +96,7 @@ export const TokenChat: React.FC<TokenChatProps> = ({ token, isOpen, onClose, in
     if (!isOpen) return null;
 
     return (
-        <div className="fixed bottom-4 right-4 z-50 w-[350px] md:w-[400px] h-[500px] bg-[#0a0a0c] border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-900/40 flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in duration-300">
+        <div className="fixed bottom-28 md:bottom-4 left-4 right-4 md:left-auto md:right-4 z-[100] w-auto md:w-[400px] h-[500px] max-h-[calc(100vh-10rem)] md:max-h-[600px] bg-[#0a0a0c] border border-purple-500/30 rounded-2xl shadow-2xl shadow-purple-900/40 flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in duration-300">
             {/* Header */}
             <div className="p-4 border-b border-purple-500/20 bg-purple-900/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -126,8 +126,8 @@ export const TokenChat: React.FC<TokenChatProps> = ({ token, isOpen, onClose, in
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-1 ${msg.role === 'user' ? 'bg-neutral-700' : 'bg-purple-600/20 text-purple-400'}`}>
                             {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3.5 h-3.5" />}
                         </div>
-                        <div className={`rounded-2xl p-3 text-sm max-w-[85%] ${msg.role === 'user'
-                            ? 'bg-neutral-800 text-white rounded-tr-sm'
+                        <div className={`rounded-2xl p-3 text-sm max-w-[85%] min-w-0 break-words overflow-x-hidden ${msg.role === 'user'
+                            ? 'bg-neutral-800 text-white rounded-tr-sm self-end'
                             : 'bg-purple-900/10 border border-purple-500/10 text-neutral-200 rounded-tl-sm'
                             }`}>
                             <div className="whitespace-pre-wrap leading-relaxed">

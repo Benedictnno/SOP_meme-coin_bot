@@ -3,12 +3,13 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TokenData } from '@/types';
+import { analyzeTokenWithGroq } from './groq_fallback';
 
 /**
  * Initialize Gemini AI
  */
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
 export interface AIAnalysis {
     narrativeScore: number;
@@ -59,16 +60,20 @@ export async function analyzeTokenNarrative(
       Volume Increase: ${token.volumeIncrease}%
       Socials: ${JSON.stringify(token.socials)}
 
-      Examine the "Narrative" for:
-      1. Originality vs. derivative of existing memes.
-      2. Viral potential (memeability).
-      3. Timeliness (relevance to current market trends).
-      4. Professionalism (does it look like a low-effort scam or a brand?).
+      SCORING RUBRIC (EXTREMELY IMPORTANT):
+      1. Originality (1-33 pts): Is this a unique idea or a lazy derivative of $DOGE/$PEPE/$WIF?
+      2. Memeability (1-33 pts): How likely is this to go viral? Is the name catchy?
+      3. Timing & Metadata (1-34 pts): Does it fit current meta? Are the socials professional?
+
+      INSTRUCTIONS FOR GRANULARITY:
+      - DO NOT use rounded numbers (e.g., Avoid 50, 60, 70, 80).
+      - PROVIDE PRECISE SCORES based on the rubric (e.g., 67, 82, 43).
+      - A score of 80 should only be given if the token is truly exceptional, not as a default.
 
       Return ONLY a JSON object with this exact structure:
       {
-        "narrativeScore": number (1-100),
-        "hypeScore": number (1-100),
+        "narrativeScore": number (1-100, be precise like 67 or 82),
+        "hypeScore": number (1-100, be precise),
         "sentiment": "bullish" | "neutral" | "bearish",
         "summary": "2-sentence summary of the project",
         "risks": ["risk 1", "risk 2"],
@@ -106,28 +111,46 @@ export async function analyzeTokenNarrative(
 
             } catch (err: any) {
                 lastError = err;
+                const isQuotaExceeded = err?.message?.includes('quota') || err?.message?.includes('Quota exceeded');
                 const is429 = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('Too Many Requests');
+
+                if (isQuotaExceeded) {
+                    console.error(`[Gemini] Quota exhausted for ${token.symbol}. Triggering Groq fallback...`);
+                    return await analyzeTokenWithGroq(token, mode);
+                }
 
                 if (is429 && attempt < maxRetries - 1) {
                     // Parse retry delay from error message, or use exponential backoff
                     const retryMatch = err?.message?.match(/retry\s+in\s+([\d.]+)s/i);
                     let waitSec = retryMatch ? parseFloat(retryMatch[1]) + 1 : Math.pow(2, attempt + 1) * 5;
 
-                    // Cap wait time to 5 seconds to avoid blocking the scan pipeline
+                    // If wait is too long, try Grok immediately
                     if (waitSec > 5) {
-                        console.warn(`[Gemini] Rate limit delay too long (${waitSec.toFixed(1)}s), failing fast for this token.`);
-                        return null;
+                        console.warn(`[Gemini] Rate limit delay too long (${waitSec.toFixed(1)}s). Triggering Groq fallback...`);
+                        return await analyzeTokenWithGroq(token, mode);
                     }
 
                     console.warn(`[Gemini] Rate limited (attempt ${attempt + 1}/${maxRetries}). Retrying in ${waitSec.toFixed(1)}s...`);
                     await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
                     continue;
                 }
+
+                if (is429) {
+                    console.warn(`[Gemini] All retries exhausted for ${token.symbol}. Triggering Groq fallback...`);
+                    return await analyzeTokenWithGroq(token, mode);
+                }
                 throw err;
             }
         }
 
         console.error(`[Gemini] All ${maxRetries} attempts failed for ${token.symbol}`);
+
+        // --- FALLBACK TO GROQ ---
+        if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'YOUR_GROQ_API_KEY') {
+            console.log(`[EXECUTION]: Gemini failed. Triggering Groq emergency fallback for ${token.symbol}...`);
+            return await analyzeTokenWithGroq(token, mode);
+        }
+
         return null;
 
     } catch (error) {

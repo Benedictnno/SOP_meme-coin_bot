@@ -13,8 +13,17 @@ export async function createEnhancedAlert(
 
     // Calculate composite score
     const baseScore = validationResult.rugCheckScore * 0.4;
-    const narrativeScore = validationResult.enhancements.narrativeQuality.score * 0.2;
-    const socialScore = validationResult.enhancements.socialSignals.overallScore;
+
+    // ENHANCEMENT: Use granular AI scores if available to avoid rounded "60/80" bias
+    const rawNarrativeScore = validationResult.enhancements.aiAnalysis?.narrativeScore ??
+        validationResult.enhancements.narrativeQuality.score;
+
+    const narrativeScore = rawNarrativeScore * 0.2;
+
+    const rawSocialScore = validationResult.enhancements.aiAnalysis?.hypeScore ??
+        validationResult.enhancements.socialSignals.overallScore;
+
+    const socialScore = rawSocialScore;
     const whaleScore = validationResult.enhancements.whaleActivity.score;
     const liquidityScore = validationResult.enhancements.liquidityStability.isStable ? 100 : 0;
 
