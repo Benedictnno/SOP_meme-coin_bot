@@ -1,14 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  
+  optimizeFonts: false,
+
   // Enable experimental features
   experimental: {
     serverActions: {
       enabled: true,
     },
   },
-  
+
   // API route configuration
   async headers() {
     return [
@@ -23,13 +24,13 @@ const nextConfig = {
       },
     ];
   },
-  
+
   // Environment variables exposed to client
   env: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_HELIUS_RPC_URL: process.env.NEXT_PUBLIC_HELIUS_RPC_URL,
   },
-  
+
   // Webpack configuration for external APIs
   webpack: (config) => {
     config.resolve.fallback = {

@@ -102,6 +102,8 @@ export interface EnhancedAlert {
     summary: string;
     risks: string[];
     potential: string;
+    intelligenceBrief?: string[];
+    narrativeAnalysis?: string;
     mode?: string;
   };
   tierReached: number; // 1, 2, or 3
