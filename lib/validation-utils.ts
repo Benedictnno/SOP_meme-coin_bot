@@ -48,7 +48,15 @@ export async function createEnhancedAlert(
 
     // AI analysis integration
     if (validationResult.enhancements.aiAnalysis) {
-        recommendations.push(`🤖 AI: ${validationResult.enhancements.aiAnalysis.summary}`);
+        recommendations.push(`🤖 AI Summary: ${validationResult.enhancements.aiAnalysis.summary}`);
+
+        // Add intelligence brief if Gemini provided it
+        if (validationResult.enhancements.aiAnalysis.intelligenceBrief) {
+            validationResult.enhancements.aiAnalysis.intelligenceBrief.forEach(brief => {
+                recommendations.push(`💡 Brief: ${brief}`);
+            });
+        }
+
         if (validationResult.enhancements.aiAnalysis.potential === 'moonshot') {
             recommendations.push('🚀 AI High Potential Detected');
         }
@@ -72,7 +80,10 @@ export async function createEnhancedAlert(
         risks: validationResult.risks,
         devScore: validationResult.enhancements.devScore || undefined,
         bundleAnalysis: validationResult.enhancements.bundleAnalysis,
-        aiAnalysis: validationResult.enhancements.aiAnalysis ? { ...validationResult.enhancements.aiAnalysis, mode: settings.aiMode } : undefined,
+        aiAnalysis: validationResult.enhancements.aiAnalysis ? {
+            ...validationResult.enhancements.aiAnalysis,
+            mode: settings.aiMode
+        } : undefined,
         tierReached: validationResult.tierReached
     };
 

@@ -17,7 +17,9 @@ export interface AIAnalysis {
     summary: string;
     risks: string[];
     potential: string;
-    mode?: string; // Analysis mode used
+    intelligenceBrief?: string[];
+    narrativeAnalysis?: string;
+    mode?: string;
 }
 
 /**
@@ -70,7 +72,9 @@ export async function analyzeTokenNarrative(
         "sentiment": "bullish" | "neutral" | "bearish",
         "summary": "2-sentence summary of the project",
         "risks": ["risk 1", "risk 2"],
-        "potential": "low" | "medium" | "high" | "moonshot"
+        "potential": "low" | "medium" | "high" | "moonshot",
+        "intelligenceBrief": ["3 key bullets for an elite trader"],
+        "narrativeAnalysis": "Brief qualitative breakdown of the 'why' behind the narrative score"
       }
     `;
 

@@ -330,8 +330,8 @@ export default function EnhancedAnalyticsDashboard() {
             </div>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-8">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-black tracking-tighter uppercase italic">
               SOP <span className="text-purple-500">Sniper</span>
             </h1>
@@ -345,41 +345,43 @@ export default function EnhancedAnalyticsDashboard() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
               id="tour-scan-btn"
               onClick={() => setIsRunning(!isRunning)}
-              className={`px-6 py-2.5 rounded-full flex items-center gap-2 transition-all font-black text-[10px] uppercase tracking-[0.2em] shadow-xl ${isRunning
+              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-black text-[10px] uppercase tracking-[0.2em] shadow-xl ${isRunning
                 ? 'bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20'
                 : 'bg-purple-600 text-white hover:bg-purple-500 shadow-purple-600/20'
                 }`}
             >
               {isRunning ? <><Pause className="w-4 h-4 fill-current" /> Stop Scan</> : <><Play className="w-4 h-4 fill-current" /> Deep Scan</>}
             </button>
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="w-10 h-10 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600 transition-all"
-            >
-              <Settings className={`w-5 h-5 ${showSettings ? 'rotate-90 text-purple-500' : ''} transition-all`} />
-            </button>
-            <button
-              onClick={() => { window.localStorage.removeItem('enhanced-alerts'); setAlerts([]); }}
-              className="w-10 h-10 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-red-500 transition-all"
-              title="Clear All Data"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="w-10 h-10 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600 transition-all"
+              >
+                <Settings className={`w-5 h-5 ${showSettings ? 'rotate-90 text-purple-500' : ''} transition-all`} />
+              </button>
+              <button
+                onClick={() => { window.localStorage.removeItem('enhanced-alerts'); setAlerts([]); }}
+                className="w-10 h-10 flex items-center justify-center rounded-full border border-neutral-800 text-neutral-400 hover:text-red-500 transition-all"
+                title="Clear All Data"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-8 mb-8 border-b border-neutral-800/50">
+        <div className="flex items-center gap-8 mb-8 border-b border-neutral-800/50 overflow-x-auto custom-scrollbar no-scrollbar">
           {[
             { id: 'alerts', label: 'Signal Feed', icon: Activity },
             { id: 'analytics', label: 'Neural Insights', icon: BarChart3 },
             { id: 'patterns', label: 'Network Cycles', icon: RefreshCw }
           ].map(view => (
-            <button key={view.id} onClick={() => setActiveView(view.id as any)} className={`pb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] transition-all relative ${activeView === view.id ? 'text-purple-500' : 'text-neutral-600 hover:text-neutral-400'}`}>
+            <button key={view.id} onClick={() => setActiveView(view.id as any)} className={`pb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] transition-all relative shrink-0 ${activeView === view.id ? 'text-purple-500' : 'text-neutral-600 hover:text-neutral-400'}`}>
               <view.icon className="w-4 h-4" />
               {view.label}
               {activeView === view.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]" />}

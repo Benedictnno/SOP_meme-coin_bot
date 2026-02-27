@@ -34,42 +34,43 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ alerts, selectedAlert, s
                         const isSelected = selectedAlert?.id === alert.id;
                         return (
                             <div key={alert.id} className="group border-l-2 border-transparent hover:border-purple-500 transition-all">
-                                <div onClick={() => setSelectedAlert(isSelected ? null : alert)} className={`px-6 py-5 flex items-center gap-6 cursor-pointer hover:bg-neutral-900/50 ${isSelected ? 'bg-neutral-900' : ''}`}>
-                                    <div className="w-12 flex flex-col items-center">
-                                        <span className={`text-xl font-bold tracking-tighter tabular-nums ${alert.compositeScore >= 80 ? 'text-green-400' : alert.compositeScore >= 60 ? 'text-purple-400' : 'text-neutral-500'}`}>{alert.compositeScore}</span>
-                                        <span className="text-[10px] uppercase tracking-[0.3em] text-neutral-700 font-black">Score</span>
+                                <div onClick={() => setSelectedAlert(isSelected ? null : alert)} className={`px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3 sm:gap-6 cursor-pointer hover:bg-neutral-900/50 ${isSelected ? 'bg-neutral-900' : ''}`}>
+                                    <div className="w-10 sm:w-12 flex flex-col items-center shrink-0">
+                                        <span className={`text-base sm:text-xl font-bold tracking-tighter tabular-nums ${alert.compositeScore >= 80 ? 'text-green-400' : alert.compositeScore >= 60 ? 'text-purple-400' : 'text-neutral-500'}`}>{alert.compositeScore}</span>
+                                        <span className="text-[8px] sm:text-[10px] uppercase tracking-[0.3em] text-neutral-700 font-black">Score</span>
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-3 mb-1">
-                                            <h3 className="text-sm font-bold text-neutral-100 tracking-tight">{alert.token.symbol}</h3>
-                                            <span className="text-[8px] px-1.5 py-0.5 bg-neutral-800 border border-neutral-700 text-neutral-500 rounded uppercase font-black tracking-widest">{alert.setupType}</span>
-                                            {alert.whaleActivity.involved && <span className="flex items-center gap-1 text-[16px] text-purple-400 font-black uppercase tracking-widest">Whale Activity</span>}
+                                        <div className="flex items-center gap-2 sm:gap-3 mb-1">
+                                            <h3 className="text-sm font-bold text-neutral-100 tracking-tight truncate">{alert.token.symbol}</h3>
+                                            <span className="text-[8px] px-1.5 py-0.5 bg-neutral-800 border border-neutral-700 text-neutral-500 rounded uppercase font-black tracking-widest shrink-0">{alert.setupType}</span>
                                         </div>
-                                        <div className="flex items-center gap-4 text-[12px] text-neutral-600 font-bold uppercase tracking-widest">
-                                            <span>{new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                                            <span className="font-mono lowercase opacity-50">{alert.token.mint.slice(0, 12)}...</span>
+                                        <div className="flex items-center gap-4 text-[11px] sm:text-[12px] text-neutral-600 font-bold uppercase tracking-widest">
+                                            <span className="shrink-0">{new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className="font-mono lowercase opacity-50 truncate hidden xs:inline">{alert.token.mint.slice(0, 8)}...</span>
                                         </div>
                                     </div>
                                     <div className="hidden md:flex flex-col items-end gap-1">
                                         <div className="text-[13px] font-bold text-neutral-400 tabular-nums">${(alert.token.liquidity / 1000).toFixed(1)}K <span className="text-neutral-500">LIQ</span></div>
                                         <div className="text-[13px] font-bold text-green-500 tabular-nums">+{alert.token.volumeIncrease.toFixed(0)}% <span className="text-neutral-500 lowercase">spike</span></div>
                                     </div>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setChatToken(alert.token);
-                                        }}
-                                        className="p-2 hover:bg-purple-500/20 rounded-full text-neutral-500 hover:text-purple-400 transition-colors"
-                                        title="Chat with AI Agent"
-                                    >
-                                        <MessageSquare className="w-5 h-5" />
-                                    </button>
-                                    <ChevronRight className={`w-4 h-4 text-neutral-800 transition-all ${isSelected ? 'rotate-90 text-purple-500' : ''}`} />
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setChatToken(alert.token);
+                                            }}
+                                            className="p-2 hover:bg-purple-500/20 rounded-full text-neutral-500 hover:text-purple-400 transition-colors"
+                                            title="Chat with AI Agent"
+                                        >
+                                            <MessageSquare className="w-5 h-5" />
+                                        </button>
+                                        <ChevronRight className={`w-4 h-4 text-neutral-800 transition-all shrink-0 ${isSelected ? 'rotate-90 text-purple-500' : ''}`} />
+                                    </div>
                                 </div>
 
                                 {isSelected && (
-                                    <div className="px-8 pb-8 pt-4 bg-neutral-950/50 border-t border-neutral-900 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-12 text-neutral-400">
+                                    <div className="px-4 sm:px-8 pb-8 pt-4 bg-neutral-950/50 border-t border-neutral-900 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:gap-12 text-neutral-400">
                                             <div className="space-y-4">
                                                 <h4 className="text-[13px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2">Analysis Vectors</h4>
                                                 <div className="space-y-3">
@@ -83,9 +84,9 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ alerts, selectedAlert, s
                                                     <h4 className="text-[13px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2">Intelligence Brief</h4>
                                                     <div className="space-y-3">
                                                         {alert.recommendations.map((rec: string, i: number) => (
-                                                            <div key={i} className="flex gap-2 text-[16px] text-neutral-300 font-medium leading-relaxed">
-                                                                <span className="text-purple-500 mt-0.5">•</span>
-                                                                <span>{rec}</span>
+                                                            <div key={i} className="flex gap-2 text-[15px] sm:text-[16px] text-neutral-300 font-medium leading-relaxed">
+                                                                  <span className="text-purple-500 mt-0.5">•</span>
+                                                                  <span>{rec}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -98,10 +99,17 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ alerts, selectedAlert, s
                                                                 <Zap className="w-3.5 h-3.5 text-purple-400" />
                                                                 <span className="text-[12px] font-black text-purple-400 uppercase tracking-widest">AI Agent Analysis</span>
                                                             </div>
-                                                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-[16px] font-black uppercase rounded tabular-nums">{alert.aiAnalysis.potential} potential</span>
+                                                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-[14px] sm:text-[16px] font-black uppercase rounded tabular-nums">{alert.aiAnalysis.potential} potential</span>
                                                         </div>
 
                                                         <p className="text-[12px] text-purple-100 italic leading-relaxed">"{alert.aiAnalysis.summary}"</p>
+
+                                                        {alert.aiAnalysis.narrativeAnalysis && (
+                                                            <div className="text-[11px] text-neutral-400 bg-neutral-900/50 p-3 rounded border border-neutral-800/50 leading-relaxed">
+                                                                <span className="text-purple-400 font-bold uppercase tracking-widest text-[9px] block mb-1">Narrative Breakdown</span>
+                                                                {alert.aiAnalysis.narrativeAnalysis}
+                                                            </div>
+                                                        )}
 
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div className="space-y-1">
@@ -120,31 +128,31 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ alerts, selectedAlert, s
                                                     </div>
                                                 )}
 
-                                                <div className="pt-2">
-                                                    <h4 className="text-[13px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2 mb-3">Volume Interval Breakdown</h4>
-                                                    <div className="grid grid-cols-3 gap-4">
-                                                        <div>
-                                                            <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">1 Hour</div>
-                                                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volume1h ? alert.token.volume1h / 1000 : 0).toFixed(1)}K</div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">6 Hours</div>
-                                                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volume6h ? alert.token.volume6h / 1000 : 0).toFixed(1)}K</div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">24 Hours</div>
-                                                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volume24h ? alert.token.volume24h / 1000 : 0).toFixed(1)}K</div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">Total Proxy</div>
-                                                            <div className="text-xs font-bold text-neutral-300">${(alert.token.volumeTotal ? alert.token.volumeTotal / 1000 : 0).toFixed(1)}K</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                  <div className="pt-2">
+                                                      <h4 className="text-[13px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2 mb-3">Volume Interval Breakdown</h4>
+                                                      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-4">
+                                                          <div>
+                                                              <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">1 Hour</div>
+                                                              <div className="text-xs font-bold text-neutral-300">${(alert.token.volume1h ? alert.token.volume1h / 1000 : 0).toFixed(1)}K</div>
+                                                          </div>
+                                                          <div>
+                                                              <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">6 Hours</div>
+                                                              <div className="text-xs font-bold text-neutral-300">${(alert.token.volume6h ? alert.token.volume6h / 1000 : 0).toFixed(1)}K</div>
+                                                          </div>
+                                                          <div>
+                                                              <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">24 Hours</div>
+                                                              <div className="text-xs font-bold text-neutral-300">${(alert.token.volume24h ? alert.token.volume24h / 1000 : 0).toFixed(1)}K</div>
+                                                          </div>
+                                                          <div>
+                                                              <div className="text-[12px] text-neutral-500 uppercase font-bold mb-1">Total Proxy</div>
+                                                              <div className="text-xs font-bold text-neutral-300">${(alert.token.volumeTotal ? alert.token.volumeTotal / 1000 : 0).toFixed(1)}K</div>
+                                                          </div>
+                                                      </div>
+                                                  </div>
                                             </div>
                                             <div className="space-y-4">
                                                 <h4 className="text-[13px] font-black text-neutral-600 uppercase tracking-[0.3em] border-b border-neutral-800 pb-2">Actions</h4>
-                                                <div className="grid grid-cols-1 gap-2">
+                                                <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-1 gap-2">
                                                     <a href={`https://jup.ag/swap/SOL-${alert.token.mint}`} target="_blank" className="flex items-center justify-center gap-2 py-2.5 bg-purple-600 text-white rounded text-[12px] font-black uppercase tracking-widest hover:bg-purple-500 transition-all">Jupiter</a>
                                                     <a href={`https://dexscreener.com/solana/${alert.token.mint}`} target="_blank" className="flex items-center justify-center gap-2 py-2.5 border border-neutral-800 text-neutral-400 rounded text-[12px] font-black uppercase tracking-widest hover:bg-neutral-800 transition-all">Dexscreener</a>
                                                     <button
@@ -152,7 +160,7 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ alerts, selectedAlert, s
                                                             e.stopPropagation();
                                                             setChatToken(alert.token);
                                                         }}
-                                                        className="flex items-center justify-center gap-2 py-2.5 border border-purple-500/30 bg-purple-500/10 text-purple-400 rounded text-[12px] font-black uppercase tracking-widest hover:bg-purple-500/20 transition-all"
+                                                        className="xs:col-span-2 md:col-span-1 flex items-center justify-center gap-2 py-2.5 border border-purple-500/30 bg-purple-500/10 text-purple-400 rounded text-[12px] font-black uppercase tracking-widest hover:bg-purple-500/20 transition-all"
                                                     >
                                                         <MessageSquare className="w-3.5 h-3.5" /> Ask AI Agent
                                                     </button>

@@ -8,7 +8,6 @@ export async function POST(request: NextRequest) {
     try {
         const payload = await request.json();
 
-        // Helius sends an array of transactions/events
         if (!Array.isArray(payload)) {
             return NextResponse.json({ message: 'Invalid payload' }, { status: 400 });
         }
@@ -25,28 +24,35 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ message: 'No active users to alert' });
         }
 
-        // Process each event (looking for pool creation or significant liquidity moves)
         for (const event of payload) {
-            // Simplified logic for brainstorming: 
-            // In a real Helius webhook, you'd check event.type === 'SWAP' or specific program IDs
-            // For now, let's assume the payload contains token metadata we can validate
+            // Robustly identify the target token mint
+            let tokenMint = event.tokenMint || event.mint;
 
-            const tokenMint = event.tokenMint || event.mint;
+            // If it's a swap, look in tokenInputs/Outputs
+            if (!tokenMint && event.type === 'SWAP' && event.events?.swap) {
+                const swap = event.events.swap;
+                const allTokens = [...(swap.tokenInputs || []), ...(swap.tokenOutputs || [])];
+                const targetToken = allTokens.find((t: any) =>
+                    t.mint !== 'So11111111111111111111111111111111111111112' &&
+                    t.mint !== 'So11111111111111111111111111111111111111111'
+                );
+                tokenMint = targetToken?.mint;
+            }
+
             if (!tokenMint) continue;
 
+            // Basic token data for validation
             const tokenData = {
                 mint: tokenMint,
                 symbol: event.symbol || 'UNK',
                 name: event.name || 'Unknown Token',
                 liquidity: event.liquidity || 0,
-                volumeIncrease: 200, // Trigger validation
+                volumeIncrease: 200,
                 priceUSD: event.price || '0',
                 marketCap: event.marketCap || 0,
                 narrative: 'Real-time discovery via Helius Webhook'
             };
 
-            // Fast validation using our new tiered system
-            // We use default master settings for the initial webhook filter
             const masterSettings: BotSettings = {
                 minLiquidity: Number(process.env.MIN_LIQUIDITY_USD) || 20000,
                 maxTopHolderPercent: Number(process.env.MAX_TOP_HOLDER_PERCENT) || 10,
@@ -59,13 +65,31 @@ export async function POST(request: NextRequest) {
             const alert = await createEnhancedAlert(tokenData as any, masterSettings);
 
             if (alert.isValid) {
-                console.log(`[Sniper Alpha] Real-time alert for ${tokenData.symbol}! Tier reached: ${alert.tierReached}`);
+                console.log(`[Helius Webhook] Valid token found: ${tokenData.symbol} (${tokenMint})`);
 
-                // Alert all matching users
                 for (const user of activeUsers) {
                     const userSettings = user.settings || masterSettings;
+
+                    // Filter based on user-specific score threshold
                     if (alert.compositeScore >= (userSettings.minCompositeScore || 0)) {
-                        await sendTelegramAlert(alert, user.telegramChatId);
+                        // Check if we sent this alert to this user recently
+                        const lastSent = await db.collection('sent_alerts').findOne({
+                            userId: user._id.toString(),
+                            mint: tokenMint,
+                            timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+                        });
+
+                        if (!lastSent) {
+                            await sendTelegramAlert(alert, user.telegramChatId);
+                            await db.collection('sent_alerts').insertOne({
+                                userId: user._id.toString(),
+                                mint: tokenMint,
+                                symbol: tokenData.symbol,
+                                type: 'webhook_alert',
+                                timestamp: new Date().toISOString()
+                            });
+                            console.log(`[Helius Webhook] Alert sent to ${user.email} for ${tokenData.symbol}`);
+                        }
                     }
                 }
             }

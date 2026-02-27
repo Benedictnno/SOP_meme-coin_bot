@@ -32,10 +32,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-400">System Nucleus</h3>
                 </div>
             </div>
-            <div className="p-10 grid grid-cols-1 md:grid-cols-2 gap-12">
-                <div className="space-y-8">
+            <div className="p-6 sm:p-10 grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12">
+                <div className="space-y-6 sm:space-y-8">
                     <div>
-                        <label className="block text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Min Liquidity (Safe Cash) $</label>
+                        <label className="block text-[11px] sm:text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Min Liquidity (Safe Cash) $</label>
                         <input
                             type="number"
                             value={settings.minLiquidity}
@@ -44,7 +44,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         />
                     </div>
                     <div>
-                        <label className="block text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Min Volume Spike (Hype) %</label>
+                        <label className="block text-[11px] sm:text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Min Volume Spike (Hype) %</label>
                         <input
                             type="number"
                             value={settings.minVolumeIncrease}
@@ -53,19 +53,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         />
                     </div>
                     <div>
-                        <label className="block text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Max Top Holder (Fairness) %</label>
+                        <label className="block text-[11px] sm:text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Max Top Holder (Fairness) %</label>
                         <input
                             type="number"
                             value={settings.maxTopHolderPercent}
                             onChange={e => setSettings({ ...settings, maxTopHolderPercent: Number(e.target.value) })}
                             className="w-full bg-neutral-950 border border-neutral-800 rounded px-4 py-3 text-sm text-neutral-200 focus:border-purple-500/50 outline-none transition-all tabular-nums font-bold"
                         />
-                        <p className="text-[8px] text-neutral-500 mt-2 uppercase font-bold">Max % one person can own (Standard: 10%)</p>
+                        <p className="text-[8px] text-neutral-500 mt-2 uppercase font-bold text-center sm:text-left">Max % one person can own (Standard: 10%)</p>
                     </div>
                 </div>
-                <div className="space-y-8">
+                <div className="space-y-6 sm:space-y-8">
                     <div>
-                        <label className="block text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Quality Filter (Score 0-100)</label>
+                        <label className="block text-[11px] sm:text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">Quality Filter (Score 0-100)</label>
                         <input
                             type="number"
                             value={settings.minCompositeScore || 0}
@@ -75,26 +75,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     </div>
 
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between p-4 bg-neutral-950 border border-neutral-800 rounded">
-                            <span className="text-[12px] font-black uppercase tracking-[0.2em] text-neutral-400">Only Whale Activity</span>
+                        <div className="flex items-center justify-between p-4 bg-neutral-950 border border-neutral-800 rounded gap-4">
+                            <span className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.2em] text-neutral-400">Only Whale Activity</span>
                             <button
                                 onClick={() => setSettings({ ...settings, whaleOnly: !settings.whaleOnly })}
-                                className={`w-10 h-5 rounded-full relative transition-all ${settings.whaleOnly ? 'bg-purple-600' : 'bg-neutral-800'}`}
+                                className={`w-10 h-5 rounded-full relative transition-all shrink-0 ${settings.whaleOnly ? 'bg-purple-600' : 'bg-neutral-800'}`}
                             >
                                 <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-all ${settings.whaleOnly ? 'translate-x-5' : ''}`} />
                             </button>
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-neutral-950 border border-neutral-800 rounded">
-                            <span className="text-[12px] font-black uppercase tracking-[0.2em] text-neutral-400">Telegram Notifications</span>
+                        <div className="flex items-center justify-between p-4 bg-neutral-950 border border-neutral-800 rounded gap-4">
+                            <span className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.2em] text-neutral-400">Telegram Notifications</span>
                             <button
                                 onClick={() => setSettings({ ...settings, enableTelegramAlerts: !settings.enableTelegramAlerts })}
-                                className={`w-10 h-5 rounded-full relative transition-all ${settings.enableTelegramAlerts ? 'bg-purple-600' : 'bg-neutral-800'}`}
+                                className={`w-10 h-5 rounded-full relative transition-all shrink-0 ${settings.enableTelegramAlerts ? 'bg-purple-600' : 'bg-neutral-800'}`}
                             >
                                 <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-all ${settings.enableTelegramAlerts ? 'translate-x-5' : ''}`} />
                             </button>
                         </div>
                         <div>
-                            <label className="block text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-2">Telegram Chat ID</label>
+                            <label className="block text-[11px] sm:text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-2">Telegram Chat ID</label>
                             <input
                                 type="text"
                                 value={telegramChatId}
@@ -102,20 +102,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                                 placeholder="e.g. 12345678"
                                 className="w-full bg-neutral-950 border border-neutral-800 rounded px-4 py-3 text-sm text-neutral-200 focus:border-purple-500/50 outline-none transition-all tabular-nums font-bold"
                             />
-                            <p className="text-[12px] text-neutral-500 mt-2 uppercase font-bold leading-relaxed">
-                                Required for private pings. <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline underline-offset-2">Click here to get your ID from @userinfobot</a>
+                            <p className="text-[11px] sm:text-[12px] text-neutral-500 mt-2 uppercase font-bold leading-relaxed">
+                                Required for private pings. <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline underline-offset-2">ID from @userinfobot</a>
                             </p>
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">AI Engine Personality</label>
+                        <label className="block text-[11px] sm:text-[12px] font-black text-neutral-600 uppercase tracking-[0.3em] mb-3">AI Engine Personality</label>
                         <div className="grid grid-cols-3 gap-2">
                             {['conservative', 'balanced', 'aggressive'].map(mode => (
                                 <button
                                     key={mode}
                                     onClick={() => setSettings({ ...settings, aiMode: mode as any })}
-                                    className={`py-2 rounded text-[12px] font-black uppercase tracking-widest border transition-all ${settings.aiMode === mode ? 'bg-purple-500/20 border-purple-500/50 text-purple-400' : 'bg-neutral-950 border-neutral-900 text-neutral-600'}`}
+                                    className={`py-2 rounded text-[10px] sm:text-[12px] font-black uppercase tracking-widest border transition-all ${settings.aiMode === mode ? 'bg-purple-500/20 border-purple-500/50 text-purple-400' : 'bg-neutral-950 border-neutral-900 text-neutral-600'}`}
                                 >
                                     {mode}
                                 </button>
@@ -126,29 +126,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             {/* Subscription Box */}
-            <div className="mx-10 mb-10 p-6 bg-purple-900/10 border border-purple-500/20 rounded-xl flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+            <div className="mx-6 sm:mx-10 mb-10 p-4 sm:p-6 bg-purple-900/10 border border-purple-500/20 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
                         <Zap className="w-5 h-5" />
                     </div>
                     <div>
-                        <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Subscription Tier</div>
-                        <div className="text-sm font-bold text-neutral-200">
+                        <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1 sm:mb-0">Subscription Tier</div>
+                        <div className="text-sm font-bold text-neutral-200 leading-tight sm:leading-normal">
                             {subscriptionInfo.expiry ? `Premium Member (Expires: ${new Date(subscriptionInfo.expiry).toLocaleDateString()})` : `Free Trial (${subscriptionInfo.trialDaysLeft} days remaining)`}
                         </div>
                     </div>
                 </div>
                 {!subscriptionInfo.expiry && (
-                    <a href="/subscribe" className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-[10px] font-black uppercase tracking-widest text-white rounded transition-all">Upgrade Now</a>
+                    <a href="/subscribe" className="w-full sm:w-auto px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-[10px] font-black uppercase tracking-widest text-white rounded transition-all text-center">Upgrade Now</a>
                 )}
             </div>
 
-            <div className="px-10 py-6 border-t border-neutral-800 bg-neutral-950/50 flex items-center justify-between">
-                <button onClick={onTestTelegram} className="text-[12px] font-black uppercase tracking-[0.2em] text-neutral-500 hover:text-purple-400 transition-all">Verify Bot Connection</button>
+            <div className="px-6 sm:px-10 py-6 border-t border-neutral-800 bg-neutral-950/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <button onClick={onTestTelegram} className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.2em] text-neutral-500 hover:text-purple-400 transition-all">Verify Bot Connection</button>
                 <button
                     onClick={() => onSaveSettings(settings)}
                     disabled={isSaving}
-                    className="px-10 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-black uppercase tracking-[0.3em] transition-all shadow-xl shadow-purple-600/20 flex items-center gap-2"
+                    className="w-full sm:w-auto px-10 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-black uppercase tracking-[0.3em] transition-all shadow-xl shadow-purple-600/20 flex items-center justify-center gap-2"
                 >
                     {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                     {isSaving ? 'Syncing...' : 'Lock Parameters'}

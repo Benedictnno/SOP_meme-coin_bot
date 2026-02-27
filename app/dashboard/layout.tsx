@@ -95,7 +95,9 @@ export default function DashboardLayout({
                 subscriptionInfo={subscriptionInfo}
                 onSignOut={() => signOut({ callbackUrl: '/login' })}
             />
-            {children}
+            <div className="pb-24 md:pb-0">
+                {children}
+            </div>
             {showTour && (
                 <OnboardingTour
                     onComplete={handleTourComplete}
