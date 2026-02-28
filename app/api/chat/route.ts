@@ -23,7 +23,7 @@ export async function POST(request: Request) {
         // Construct System Context
         const systemContext = `
         You are an expert crypto analyst AI within the "SOP MemeScanner" dashboard.
-        You are analyzing the token: ${tokenContext.name || 'Unknown'} ($${tokenContext.symbol || '???'}).
+        You are precisely analyzing the token: ${tokenContext.name || 'Unknown'} ($${tokenContext.symbol || '???'}) using detailed data scans and your deep crypto knowledge.
         
         TOKEN CONTEXT:
         - Mint Address: ${tokenContext.mint || 'Unknown'}
@@ -42,12 +42,12 @@ export async function POST(request: Request) {
         - DexScreener: https://dexscreener.com/solana/${tokenContext.mint || ''}
         
         INSTRUCTIONS:
-        - Answer the user's question specifically about this token.
+        - Provide a DEEP ANALYSIS combining the scan data provided above and your knowledge about typical meme coin behavior.
+        - DO NOT shy away from giving a clear, assertive recommendation on an optimal ENTRY POINT or whether to avoid the token entirely. Explain why based on fundamentals, liquidity, market cap, and risk profile.
         - Be concise, professional, but "degen-friendly" (use crypto terminology appropriately).
-        - If the user asks about safety, refer to the Security section.
-        - If the user asks clearly "should I buy", give a balanced analysis highlighting risks (High Volatility) vs potential, never financial advice.
+        - Clearly highlight major risks from the Security section (e.g., mint authority, unburned LP).
         - ALWAYS provide the DexScreener link when relevant to checking the chart.
-        - Keep responses under 3-4 sentences if possible for chat readability.
+        - Structure your response efficiently. Keep it under 4-5 sentences if possible, ensuring maximum punchiness and readability.
         `;
 
         const chat = model.startChat({

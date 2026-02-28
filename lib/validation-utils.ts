@@ -57,12 +57,13 @@ export async function createEnhancedAlert(
 
     // AI analysis integration
     if (validationResult.enhancements.aiAnalysis) {
-        recommendations.push(`🤖 AI Summary: ${validationResult.enhancements.aiAnalysis.summary}`);
+        // More prominent AI recommendation
+        recommendations.push(`🤖 AI Verdict: ${validationResult.enhancements.aiAnalysis.sentiment.toUpperCase()} - ${validationResult.enhancements.aiAnalysis.summary}`);
 
         // Add intelligence brief if Gemini provided it
-        if (validationResult.enhancements.aiAnalysis.intelligenceBrief) {
+        if (validationResult.enhancements.aiAnalysis.intelligenceBrief && validationResult.enhancements.aiAnalysis.intelligenceBrief.length > 0) {
             validationResult.enhancements.aiAnalysis.intelligenceBrief.forEach(brief => {
-                recommendations.push(`💡 Brief: ${brief}`);
+                recommendations.push(`💡 Insight: ${brief}`);
             });
         }
 
