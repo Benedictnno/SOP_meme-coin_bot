@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   title: 'SOP Scanner | Master the Trench',
   description: 'Automated 7-point security validation for Solana meme coins. Stop getting rugged.',
   keywords: ['solana', 'meme coin', 'trading', 'crypto', 'alerts', 'security', 'scanner'],
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png',
+  },
 };
 
 export default function RootLayout({
