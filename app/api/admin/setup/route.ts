@@ -3,14 +3,14 @@ import { getDatabase } from '@/lib/mongodb';
 
 /**
  * POST /api/admin/setup
- * Securely promote a user to admin using the CRON_SECRET.
+ * Securely promote a user to admin using the ADMIN_PROMOTION_SECRET.
  * Body: { "email": "user@example.com" }
- * Header: Authorization: Bearer <CRON_SECRET>
+ * Header: Authorization: Bearer <ADMIN_PROMOTION_SECRET>
  */
 export async function POST(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
-        const expectedSecret = process.env.CRON_SECRET;
+        const expectedSecret = process.env.ADMIN_PROMOTION_SECRET || process.env.CRON_SECRET; // fallback for backwards compatibility
 
         if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });

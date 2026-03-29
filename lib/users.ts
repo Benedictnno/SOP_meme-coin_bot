@@ -76,6 +76,11 @@ export async function updateUserTelegram(userId: string, chatId: string) {
 }
 
 export async function hasActiveSubscription(user: User): Promise<boolean> {
+    // Admin bypass: Admins always have an active subscription
+    if (user.role === 'admin') {
+        return true;
+    }
+
     const now = new Date();
 
     // 1. Check paid subscription
@@ -118,6 +123,8 @@ export async function getAllActiveUsers(): Promise<User[]> {
 
     return await db.collection<User>('users').find({
         $or: [
+            // Admin role is always active
+            { role: 'admin' },
             // Active paid subscription
             { subscriptionExpiresAt: { $gt: now.toISOString() } },
             // Active free trial (less than 21 days old)

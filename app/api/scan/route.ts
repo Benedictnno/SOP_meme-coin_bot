@@ -7,6 +7,10 @@ import { createEnhancedAlert } from '@/lib/validation-utils';
 import { BotSettings, EnhancedAlert } from '@/types';
 import { getUserById, hasActiveSubscription } from '@/lib/users';
 
+import { sendTelegramAlert } from '@/lib/telegram';
+import { getDatabase } from '@/lib/mongodb';
+import { getAllActiveUsers } from '@/lib/users';
+
 export async function POST(request: Request) {
   const startTime = Date.now();
   try {
@@ -19,7 +23,6 @@ export async function POST(request: Request) {
     if (isMasterScan) {
       // MASTER SCAN MODE: Single discovery, multi-user alerting
       console.log('Master Scan triggered via Cron Secret');
-      const { getAllActiveUsers } = await import('@/lib/users');
       usersToAlert = await getAllActiveUsers();
       console.log(`Master Scan: Identified ${usersToAlert.length} active users to alert`);
 
@@ -83,8 +86,15 @@ export async function POST(request: Request) {
     // 2. Validate each token
     // OPTIMIZATION: Use Tier 1 Fast-Filter for Master Scan
     if (isMasterScan) {
-      const { getDatabase } = await import('@/lib/mongodb');
       const db = await getDatabase();
+
+      // Pre-fetch recent alerts to prevent massive connection pooling
+      const recentAlerts = await db.collection('sent_alerts').find({
+        timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+      }).toArray();
+      const recentAlertsSet = new Set(recentAlerts.map(a => `${a.userId}-${a.mint}`));
+
+      const pendingInserts: any[] = [];
 
       const validationPromises = discoveredTokens.map(async (token) => {
         // Time guard: Don't start new validation if we're past 8.5 seconds
@@ -110,22 +120,21 @@ export async function POST(request: Request) {
             const meetsScore = alert.compositeScore >= (userSettings.minCompositeScore || 0);
 
             if (meetsLiquidity && meetsHolders && meetsScore) {
-              const lastSent = await db.collection('sent_alerts').findOne({
-                userId: user._id.toString(),
-                mint: token.mint,
-                timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
-              });
+              const alertKey = `${user._id.toString()}-${token.mint}`;
+              const lastSent = recentAlertsSet.has(alertKey);
 
               if (!lastSent && userSettings.enableTelegramAlerts && user.telegramChatId) {
-                const { sendTelegramAlert } = await import('@/lib/telegram');
                 await sendTelegramAlert(alert, user.telegramChatId);
-                await db.collection('sent_alerts').insertOne({
+                
+                pendingInserts.push({
                   userId: user._id.toString(),
                   mint: token.mint,
                   symbol: token.symbol,
                   type: 'alert',
                   timestamp: new Date().toISOString()
                 });
+                recentAlertsSet.add(alertKey);
+                
                 sentToAnyUser = true;
                 console.log(`[Alert Sent] ${token.symbol} sent to ${user.email}`);
               } else {
@@ -144,6 +153,10 @@ export async function POST(request: Request) {
       });
 
       await Promise.all(validationPromises);
+
+      if (pendingInserts.length > 0) {
+          await db.collection('sent_alerts').insertMany(pendingInserts);
+      }
     } else {
       // SEQUENTIAL MODE FOR USER (Dashboard UI visibility)
       for (const token of discoveredTokens) {
@@ -162,7 +175,6 @@ export async function POST(request: Request) {
 
             // Optional: User-triggered scans also send Telegram if enabled
             if (userSettings.enableTelegramAlerts && user.telegramChatId) {
-              const { getDatabase } = await import('@/lib/mongodb');
               const db = await getDatabase();
               const lastSent = await db.collection('sent_alerts').findOne({
                 userId: user._id.toString(),
@@ -171,7 +183,6 @@ export async function POST(request: Request) {
               });
 
               if (!lastSent) {
-                const { sendTelegramAlert } = await import('@/lib/telegram');
                 await sendTelegramAlert(alert, user.telegramChatId);
                 await db.collection('sent_alerts').insertOne({
                   userId: user._id.toString(),

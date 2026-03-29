@@ -6,6 +6,14 @@ import { sendTelegramAlert } from '@/lib/telegram';
 
 export async function POST(request: NextRequest) {
     try {
+        const authHeader = request.headers.get('authorization');
+        const expectedSecret = process.env.HELIUS_WEBHOOK_SECRET;
+
+        if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+            console.error('Unauthorized Helius webhook request');
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const payload = await request.json();
 
         if (!Array.isArray(payload)) {
@@ -42,7 +50,7 @@ export async function POST(request: NextRequest) {
             if (!tokenMint) continue;
 
             // Basic token data for validation
-            const tokenData = {
+            let tokenData: any = {
                 mint: tokenMint,
                 symbol: event.symbol || 'UNK',
                 name: event.name || 'Unknown Token',
@@ -52,6 +60,23 @@ export async function POST(request: NextRequest) {
                 marketCap: event.marketCap || 0,
                 narrative: 'Real-time discovery via Helius Webhook'
             };
+
+            try {
+                const { getTokenDetails } = await import('@/lib/validators/dexscreener');
+                const dexToken = await getTokenDetails(tokenMint);
+                if (dexToken) {
+                    tokenData = {
+                        ...tokenData,
+                        symbol: dexToken.symbol || tokenData.symbol,
+                        name: dexToken.name || tokenData.name,
+                        liquidity: dexToken.liquidity, // Real liquidity from DexScreener
+                        priceUSD: dexToken.priceUSD || tokenData.priceUSD,
+                        marketCap: dexToken.marketCap || tokenData.marketCap
+                    };
+                }
+            } catch (err) {
+                console.error(`Failed to fetch DexScreener data for ${tokenMint}`, err);
+            }
 
             const masterSettings: BotSettings = {
                 minLiquidity: Number(process.env.MIN_LIQUIDITY_USD) || 20000,

@@ -27,16 +27,23 @@ export async function scanDEXScreener(volumeThreshold: number = 200): Promise<To
 
     // Fetch from multiple queries to build a pool
     for (const query of searchQueries) {
-      try {
-        console.log(`Searching DexScreener for: ${query}...`);
-        const response = await fetch(`${DEX_SCREENER_BASE}/search?q=${query}`, {
-          headers: { 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(5000)
-        });
-        const data = await response.json();
-        if (data.pairs) allPairs = [...allPairs, ...data.pairs];
-      } catch (err) {
-        console.warn(`Search failed for ${query}`);
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          console.log(`Searching DexScreener for: ${query}...`);
+          const response = await fetch(`${DEX_SCREENER_BASE}/search?q=${query}`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(5000)
+          });
+          const data = await response.json();
+          if (data.pairs) allPairs = [...allPairs, ...data.pairs];
+          break; // success
+        } catch (err) {
+          retries--;
+          console.warn(`Search failed for ${query}. Retries left: ${retries}`);
+          if (retries === 0) break;
+          await new Promise(resolve => setTimeout(resolve, 1500)); // wait 1.5s
+        }
       }
     }
 

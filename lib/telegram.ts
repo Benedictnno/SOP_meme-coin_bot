@@ -33,7 +33,7 @@ export async function sendTelegramAlert(alert: EnhancedAlert, overrideChatId?: s
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
           disable_web_page_preview: true
         })
       }
@@ -73,51 +73,62 @@ export function formatAlertMessage(alert: EnhancedAlert): string {
     sellTest: checks.sellTest ? '✅' : '❌'
   };
 
+  const escapeHTML = (text: string | null | undefined) => {
+    if (!text) return '';
+    return text.toString()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
+
+  const safeSymbol = escapeHTML(token.symbol);
+  const safeName = escapeHTML(token.name);
+  const safeAiSummary = aiAnalysis ? escapeHTML(aiAnalysis.summary) : '';
+
   const message = `
-🚨 *SOLANA BOT: NEW HIGH-POTENTIAL COIN* 🚨
+🚨 <b>SOLANA BOT: NEW HIGH-POTENTIAL COIN</b> 🚨
 
-*Token:* ${token.symbol} (${token.name})
-*Strategy:* ${setupType === 'Base Break' ? 'Heavy Buy Pressure' : 'Healthy Dip Entry'}
-*Confidence:* ${passedChecks}/${totalChecks} ${passedChecks === totalChecks ? '💎 DIAMOND' : '⚠️ WATCH'}
+<b>Token:</b> ${safeSymbol} (${safeName})
+<b>Strategy:</b> ${setupType === 'Base Break' ? 'Heavy Buy Pressure' : 'Healthy Dip Entry'}
+<b>Confidence:</b> ${passedChecks}/${totalChecks} ${passedChecks === totalChecks ? '💎 DIAMOND' : '⚠️ WATCH'}
 
-*📊 Volume Breakdown (Trading Activity)*
+<b>📊 Volume Breakdown (Trading Activity)</b>
 🕐 Last 1 Hour: $${(token.volume1h ? token.volume1h / 1000 : 0).toFixed(1)}k
 📅 Last 24 Hours: $${(token.volume24h ? token.volume24h / 1000 : 0).toFixed(1)}k
 📈 Growth Spike: ${token.volumeIncrease.toFixed(0)}%
 💰 Safe Liquidity: $${(token.liquidity / 1000).toFixed(1)}k
 
-*🔍 Health Check (Simple Explanations)*
-${checkEmojis.narrative} *Social Trend:* Good story & social presence?
-${checkEmojis.attention} *Hype Spike:* Sudden surge in interest?
-${checkEmojis.liquidity} *Cash Depth:* Enough money for easy trading?
-${checkEmojis.volume} *Real Volume:* Genuine trading activity?
-${checkEmojis.contract} *Safe Code:* Clean from scam functions?
-${checkEmojis.holders} *Fair Shares:* Top holders own too much? (${token.topHolderPercent.toFixed(1)}%)
-${checkEmojis.sellTest} *Selling:* Can we exit profit easily?
+<b>🔍 Health Check (Simple Explanations)</b>
+${checkEmojis.narrative} <b>Social Trend:</b> Good story &amp; social presence?
+${checkEmojis.attention} <b>Hype Spike:</b> Sudden surge in interest?
+${checkEmojis.liquidity} <b>Cash Depth:</b> Enough money for easy trading?
+${checkEmojis.volume} <b>Real Volume:</b> Genuine trading activity?
+${checkEmojis.contract} <b>Safe Code:</b> Clean from scam functions?
+${checkEmojis.holders} <b>Fair Shares:</b> Top holders own too much? (${token.topHolderPercent.toFixed(1)}%)
+${checkEmojis.sellTest} <b>Selling:</b> Can we exit profit easily?
 
-*🛡️ Scoreboard*
-🛡️ *Security Score:* ${rugCheckScore}/100 (High = Safer)
-🎯 *Final Alpha Score:* ${compositeScore}/100 (AI Rating)
+<b>🛡️ Scoreboard</b>
+🛡️ <b>Security Score:</b> ${rugCheckScore}/100 (High = Safer)
+🎯 <b>Final Alpha Score:</b> ${compositeScore}/100 (AI Rating)
 
-${risks && risks.length > 0 ? `*⚠️ Red Flags:*
-${risks.map(r => `• ${r}`).join('\n')}
+${risks && risks.length > 0 ? `<b>⚠️ Red Flags:</b>
+${risks.map(r => `• ${escapeHTML(r)}`).join('\n')}
 ` : ''}
+${aiAnalysis ? `🤖 <b>AI NARRATIVE AGENT</b>
+<i>${safeAiSummary}</i>
 
-${aiAnalysis ? `🤖 *AI NARRATIVE AGENT*
-_${aiAnalysis.summary}_
+<b>Market Sentiment:</b> ${escapeHTML(aiAnalysis.sentiment.toUpperCase())}
+<b>Potential:</b> ${escapeHTML(aiAnalysis.potential.toUpperCase())}
+` : `🤖 <b>AI AGENT:</b> No recent narrative metadata for deep analysis.`}
 
-*Market Sentiment:* ${aiAnalysis.sentiment.toUpperCase()}
-*Potential:* ${aiAnalysis.potential.toUpperCase()}
-` : `🤖 *AI AGENT:* No recent narrative metadata for deep analysis.`}
+<b>🔗 Trade &amp; View</b>
+<a href="https://jup.ag/swap/SOL-${token.mint}">Buy on Jupiter</a>
+<a href="https://dexscreener.com/solana/${token.pairAddress || token.mint}">DexScreener Chart</a>
 
-*🔗 Trade & View*
-[Buy on Jupiter](https://jup.ag/swap/SOL-${token.mint})
-[DexScreener Chart](https://dexscreener.com/solana/${token.pairAddress || token.mint})
+<b>📋 Contract</b>
+<code>${token.mint}</code>
 
-*📋 Contract*
-\`${token.mint}\`
-
-⚠️ *Warning: Memecoins are high risk. Trade responsibly.*
+⚠️ <b>Warning: Memecoins are high risk. Trade responsibly.</b>
   `.trim();
 
   return message;
@@ -139,7 +150,7 @@ export async function sendTestMessage(): Promise<boolean> {
   try {
     console.log(`Sending Telegram test message to ${chatId} using token ${botToken.substring(0, 10)}...`);
     const message = `
-🤖 *Solana Meme Alert Bot*
+🤖 <b>Solana Meme Alert Bot</b>
 
 Test message - your Telegram integration is working!
 
@@ -160,7 +171,7 @@ The bot is configured and ready to send alerts.
           body: JSON.stringify({
             chat_id: chatId,
             text: message,
-            parse_mode: 'Markdown'
+            parse_mode: 'HTML'
           }),
           signal: controller.signal
         }
@@ -211,13 +222,21 @@ export async function sendBatchSummary(alerts: Alert[]): Promise<boolean> {
   }
 
   try {
+    const escapeHTML = (text: string | null | undefined) => {
+      if (!text) return '';
+      return text.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    };
+
     const message = `
-📊 *Daily Alert Summary*
+📊 <b>Daily Alert Summary</b>
 
 Found ${validAlerts.length} valid setup(s) today:
 
 ${validAlerts.map((alert, i) =>
-      `${i + 1}. *${alert.token.symbol}* - ${alert.setupType}
+      `${i + 1}. <b>${escapeHTML(alert.token.symbol)}</b> - ${alert.setupType}
    💰 $${(alert.token.liquidity / 1000).toFixed(1)}k liquidity
    📈 +${alert.token.volumeIncrease.toFixed(0)}% volume`
     ).join('\n\n')}
@@ -235,7 +254,7 @@ Check the dashboard for full details.
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
-          parse_mode: 'Markdown'
+          parse_mode: 'HTML'
         })
       }
     );
@@ -268,25 +287,32 @@ export async function sendWalletActivityAlert(
 
   const typeEmoji = activity.type === 'buy' ? '🟢 BUY' : '🔴 SELL';
   const confidenceEmoji = alert?.compositeScore && alert.compositeScore >= 70 ? '💎' : '⚠️';
+  const escapeHTML = (text: string | null | undefined) => {
+    if (!text) return '';
+    return text.toString()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
 
   let message = `
-🔔 *WALLET TRACKER: ${typeEmoji}*
+🔔 <b>WALLET TRACKER: ${typeEmoji}</b>
 
-*Wallet:* ${label}
-\`${walletAddress}\`
+<b>Wallet:</b> ${escapeHTML(label)}
+<code>${walletAddress}</code>
 
-*Token:* ${activity.tokenSymbol}
-*Amount:* ${activity.tokenAmount.toFixed(2)} (${activity.solAmount.toFixed(2)} SOL)
+<b>Token:</b> ${escapeHTML(activity.tokenSymbol)}
+<b>Amount:</b> ${activity.tokenAmount.toFixed(2)} (${activity.solAmount.toFixed(2)} SOL)
 
-${alert ? `*SOP Security Validation:*
+${alert ? `<b>SOP Security Validation:</b>
 🛡️ Alpha Score: ${alert.compositeScore}/100 ${confidenceEmoji}
 ✅ Checks: ${alert.passedChecks}/${alert.totalChecks}
-⚠️ Risks: ${alert.risks.length > 0 ? alert.risks[0] : 'None'}
+⚠️ Risks: ${alert.risks.length > 0 ? escapeHTML(alert.risks[0]) : 'None'}
 
-[Buy on Jupiter](https://jup.ag/swap/SOL-${activity.tokenMint})
-` : `_Token security validation not available_`}
+<a href="https://jup.ag/swap/SOL-${activity.tokenMint}">Buy on Jupiter</a>
+` : `<i>Token security validation not available</i>`}
 
-[View Transaction](https://solscan.io/tx/${activity.signature})
+<a href="https://solscan.io/tx/${activity.signature}">View Transaction</a>
   `.trim();
 
   try {
@@ -298,7 +324,7 @@ ${alert ? `*SOP Security Validation:*
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
           disable_web_page_preview: true
         })
       }
@@ -340,22 +366,22 @@ export async function sendTeaserAlert(
         : '50-69 🟠 MODERATE';
 
     const message = `
-🚨 *SOP MEMESCANNER — SIGNAL DETECTED* 🚨
+🚨 <b>SOP MEMESCANNER — SIGNAL DETECTED</b> 🚨
 
-⚠️ *Your free trial has ended.*
+⚠️ <b>Your free trial has ended.</b>
 The engine just caught a high-opportunity token — and you're missing it.
 
-*📊 Signal Overview*
-🎯 Alpha Score: *${scoreLabel}*
-🔍 Checks Passed: *${alert.passedChecks}/${alert.totalChecks}*
-💰 Liquidity: *$${(alert.token.liquidity / 1000).toFixed(0)}k+*
-📈 Volume Spike: *${alert.token.volumeIncrease.toFixed(0)}%+*
+<b>📊 Signal Overview</b>
+🎯 Alpha Score: <b>${scoreLabel}</b>
+🔍 Checks Passed: <b>${alert.passedChecks}/${alert.totalChecks}</b>
+💰 Liquidity: <b>$${(alert.token.liquidity / 1000).toFixed(0)}k+</b>
+📈 Volume Spike: <b>${alert.token.volumeIncrease.toFixed(0)}%+</b>
 
-🔒 *Token name, mint, buy links & AI analysis are locked.*
+🔒 <b>Token name, mint, buy links &amp; AI analysis are locked.</b>
 
-👉 *[Unlock Full Access → Subscribe Now](${appUrl}/subscribe)*
+👉 <a href="${appUrl}/subscribe">Unlock Full Access → Subscribe Now</a>
 
-_Upgrade with SOL to resume all alerts immediately._
+<i>Upgrade with SOL to resume all alerts immediately.</i>
     `.trim();
 
     const response = await fetch(
@@ -366,7 +392,7 @@ _Upgrade with SOL to resume all alerts immediately._
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
           disable_web_page_preview: true
         })
       }
