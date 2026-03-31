@@ -12,43 +12,75 @@ const DEX_SCREENER_BASE = 'https://api.dexscreener.com/latest/dex';
  */
 export async function scanDEXScreener(volumeThreshold: number = 200): Promise<TokenData[]> {
   try {
-    // Fetch latest Solana pairs with minimum liquidity
-    // Using search endpoint as discovery source
-    // Discovery: Search for common Solana DEX names and identifiers 
-    // This is much more effective than searching for "solana" which returns scams on other chains
-    const searchQueries = [
-      'raydium',     // Primary Solana DEX
-      'meteora',     // Popular Solana LP
-      'pump.fun',    // Solana meme launcher
-      'orca'         // Another Solana DEX
-    ];
-
     let allPairs: any[] = [];
+    let tokenAddresses: string[] = [];
 
-    // Fetch from multiple queries to build a pool
-    for (const query of searchQueries) {
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          console.log(`Searching DexScreener for: ${query}...`);
-          const response = await fetch(`${DEX_SCREENER_BASE}/search?q=${query}`, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000)
-          });
-          const data = await response.json();
-          if (data.pairs) allPairs = [...allPairs, ...data.pairs];
-          break; // success
-        } catch (err) {
-          retries--;
-          console.warn(`Search failed for ${query}. Retries left: ${retries}`);
-          if (retries === 0) break;
-          await new Promise(resolve => setTimeout(resolve, 1500)); // wait 1.5s
+    // 1. Fetch Latest Profiles
+    try {
+      console.log('Fetching Latest Profiles from DexScreener...');
+      const profileRes = await fetch('https://api.dexscreener.com/token-profiles/latest/v1', {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (profileRes.ok) {
+        const profiles = await profileRes.json();
+        if (Array.isArray(profiles)) {
+          const sol = profiles.filter(p => p.chainId === 'solana').map(p => p.tokenAddress);
+          tokenAddresses.push(...sol);
         }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch token-profiles');
+    }
+
+    // 2. Fetch Top Boosts
+    try {
+      console.log('Fetching Top Boosts from DexScreener...');
+      const boostsRes = await fetch('https://api.dexscreener.com/token-boosts/top/v1', {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (boostsRes.ok) {
+        const boosts = await boostsRes.json();
+        if (Array.isArray(boosts)) {
+          const sol = boosts.filter(p => p.chainId === 'solana').map(p => p.tokenAddress);
+          tokenAddresses.push(...sol);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch token-boosts');
+    }
+
+    // Deduplicate addresses and limit to 30 (DEXScreener max per request)
+    tokenAddresses = [...new Set(tokenAddresses)].slice(0, 30);
+
+    if (tokenAddresses.length === 0) {
+      console.warn('No tokens discovered from DexScreener trending APIs');
+      return [];
+    }
+
+    // 3. Fetch Pair Data for Tokens
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        console.log(`Fetching pair data for ${tokenAddresses.length} discovered tokens...`);
+        const response = await fetch(`${DEX_SCREENER_BASE}/tokens/${tokenAddresses.join(',')}`, {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(5000)
+        });
+        const data = await response.json();
+        if (data.pairs) allPairs = [...data.pairs];
+        break;
+      } catch (err) {
+        retries--;
+        console.warn(`Pair fetch failed. Retries left: ${retries}`);
+        if (retries === 0) break;
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
 
     if (allPairs.length === 0) {
-      console.warn('No pairs found in any search query');
+      console.warn('No pairs found for discovered tokens');
       return [];
     }
 
