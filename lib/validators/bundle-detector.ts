@@ -3,12 +3,16 @@
 /**
  * Detect if a token was "bundled" during launch
  */
-export async function detectBundledLaunch(mintAddress: string): Promise<{
+export async function detectBundledLaunch(mintAddress: string, skipRPC: boolean = false): Promise<{
     isBundled: boolean;
     bundlePercentage: number;
     sybilCount: number;
     details: string[];
 }> {
+    if (skipRPC) {
+        return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: ['Skipped during continuous cron validation'] };
+    }
+
     const rpcUrl = process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL;
     if (!rpcUrl) return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: [] };
 

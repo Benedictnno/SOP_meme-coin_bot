@@ -12,6 +12,7 @@ interface SettingsPanelProps {
     saveSuccess: boolean;
     onTestTelegram: () => void;
     subscriptionInfo: { expiry: string | null; trialDaysLeft: number };
+    userRole?: string;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -22,7 +23,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     onSaveSettings,
     isSaving,
     onTestTelegram,
-    subscriptionInfo
+    subscriptionInfo,
+    userRole
 }) => {
     return (
         <div className="border border-neutral-800 rounded bg-neutral-900/80 backdrop-blur-3xl shadow-2xl overflow-hidden mb-12 max-w-4xl mx-auto animate-in zoom-in-95 duration-300">
@@ -134,11 +136,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     <div>
                         <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1 sm:mb-0">Subscription Tier</div>
                         <div className="text-sm font-bold text-neutral-200 leading-tight sm:leading-normal">
-                            {subscriptionInfo.expiry ? `Premium Member (Expires: ${new Date(subscriptionInfo.expiry).toLocaleDateString()})` : `Free Trial (${subscriptionInfo.trialDaysLeft} days remaining)`}
+                            {userRole === 'admin' ? 'Founders Pass (LIFETIME)' : subscriptionInfo.expiry ? `Premium Member (Expires: ${new Date(subscriptionInfo.expiry).toLocaleDateString()})` : `Free Trial (${subscriptionInfo.trialDaysLeft} days remaining)`}
                         </div>
                     </div>
                 </div>
-                {!subscriptionInfo.expiry && (
+                {(!subscriptionInfo.expiry && userRole !== 'admin') && (
                     <a href="/subscribe" className="w-full sm:w-auto px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-[10px] font-black uppercase tracking-widest text-white rounded transition-all text-center">Upgrade Now</a>
                 )}
             </div>

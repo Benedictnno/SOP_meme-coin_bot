@@ -111,6 +111,9 @@ ${checkEmojis.sellTest} <b>Selling:</b> Can we exit profit easily?
 🛡️ <b>Security Score:</b> ${rugCheckScore}/100 (High = Safer)
 🎯 <b>Final Alpha Score:</b> ${compositeScore}/100 (AI Rating)
 
+${alert.whaleActivity.involved ? `<b>🐋 WHALE ACTIVITY:</b>
+• Tracked Smart Wallets are accumulating!
+` : ''}
 ${risks && risks.length > 0 ? `<b>⚠️ Red Flags:</b>
 ${risks.map(r => `• ${escapeHTML(r)}`).join('\n')}
 ` : ''}

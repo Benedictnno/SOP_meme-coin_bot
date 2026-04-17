@@ -34,9 +34,10 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({
     };
 
     // Determine subscription status
-    const hasActiveSubscription = subscriptionInfo.expiry && new Date(subscriptionInfo.expiry) > new Date();
-    const hasActiveTrial = !hasActiveSubscription && subscriptionInfo.trialDaysLeft > 0;
-    const isExpired = !hasActiveSubscription && subscriptionInfo.trialDaysLeft <= 0;
+    const isAdmin = session?.user?.role === 'admin';
+    const hasActiveSubscription = isAdmin || (subscriptionInfo.expiry && new Date(subscriptionInfo.expiry) > new Date());
+    const hasActiveTrial = !hasActiveSubscription && !isAdmin && subscriptionInfo.trialDaysLeft > 0;
+    const isExpired = !hasActiveSubscription && !isAdmin && subscriptionInfo.trialDaysLeft <= 0;
 
     return (
         <>
@@ -61,7 +62,12 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({
                                     : 'bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20'
                                 }`}
                         >
-                            {hasActiveSubscription ? (
+                            {isAdmin ? (
+                                <>
+                                    <Shield className="w-3 h-3 text-purple-400" />
+                                    <span>Admin Account</span>
+                                </>
+                            ) : hasActiveSubscription ? (
                                 <>
                                     <Crown className="w-3 h-3" />
                                     <span>Pro Active</span>
@@ -122,7 +128,9 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({
                                     : 'bg-red-500/10 border border-red-500/30 text-red-400'
                                 }`}
                         >
-                            {hasActiveSubscription ? (
+                            {isAdmin ? (
+                                <Shield className="w-3 h-3 text-purple-400" />
+                            ) : hasActiveSubscription ? (
                                 <Crown className="w-3 h-3" />
                             ) : hasActiveTrial ? (
                                 <><Clock className="w-3 h-3" /><span>{subscriptionInfo.trialDaysLeft}d</span></>

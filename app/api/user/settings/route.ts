@@ -22,6 +22,7 @@ export async function GET() {
 
         return NextResponse.json({
             success: true,
+            role: user.role,
             settings: user.settings,
             telegramChatId: user.telegramChatId,
             subscriptionExpiresAt: user.subscriptionExpiresAt,

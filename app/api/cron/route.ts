@@ -47,9 +47,8 @@ export async function GET(request: NextRequest) {
       telegramEnabled: settings.enableTelegramAlerts
     });
 
-    // Trigger scan via internal API call
+    // 1. Discover Tokens via Scan API
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
     const scanResponse = await fetch(`${appUrl}/api/scan`, {
       method: 'POST',
       headers: {
@@ -67,9 +66,21 @@ export async function GET(request: NextRequest) {
 
     const result = await scanResponse.json();
 
-    console.log('Cron scan complete:', {
+    // 2. Monitor Private Wallets for Swaps
+    console.log('Triggering Wallet Activity Monitor...');
+    const monitorResponse = await fetch(`${appUrl}/api/wallets/monitor`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`
+        }
+    });
+    
+    const monitorResult = await monitorResponse.json().catch(() => ({ alertsSent: 0 }));
+
+    console.log('Cron process complete:', {
       scanned: result.scanned,
       valid: result.valid,
+      walletAlerts: monitorResult.alertsSent,
       timestamp: new Date().toISOString()
     });
 
@@ -78,7 +89,8 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
       scanned: result.scanned,
       valid: result.valid,
-      message: `Scanned ${result.scanned} tokens, found ${result.valid} valid setups`
+      walletAlerts: monitorResult.alertsSent,
+      message: `Scanned ${result.scanned} tokens (${result.valid} valid). Sent ${monitorResult.alertsSent} wallet alerts.`
     });
 
   } catch (error) {

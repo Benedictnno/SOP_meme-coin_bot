@@ -70,8 +70,9 @@ async function handleStatusCommand(chatId: string) {
     }
 
     const isSubscribed = await hasActiveSubscription(user);
+    const isAdmin = user.role === 'admin';
     const status = isSubscribed ? "✅ <b>Active</b>" : "❌ <b>Expired</b>";
-    const expiry = user.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt).toLocaleDateString() : "Free Trial Period";
+    const expiry = isAdmin ? "Founders Pass (LIFETIME)" : (user.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt).toLocaleDateString() : "Free Trial Period");
 
     await sendMessage(chatId, `📊 <b>Subscription Status:</b> ${status}\n📅 <b>Expiry/Renewal:</b> ${expiry}`);
 }

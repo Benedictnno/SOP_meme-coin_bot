@@ -80,6 +80,7 @@ export interface EnhancedAlert {
     involved: boolean;
     confidence: number;
     score: number;
+    wallets?: string[];
   };
   timeMultiplier: number;
   recommendations: string[];

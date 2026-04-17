@@ -83,12 +83,25 @@ export async function POST(request: Request) {
     let scannedCount = 0;
     let validCount = 0;
 
-    // 2. Validate each token
-    // OPTIMIZATION: Use Tier 1 Fast-Filter for Master Scan
+    // 2. Process using concurrency
+    async function processWithConcurrency<T>(
+        items: T[],
+        concurrency: number,
+        processor: (item: T) => Promise<void>
+    ) {
+        const queue = [...items];
+        const workers = Array.from({ length: concurrency }, async () => {
+             // 8.5 second strict guard for Vercel functions if used
+            while (queue.length > 0 && Date.now() - startTime < 8500) {
+                const item = queue.shift();
+                if (item) await processor(item);
+            }
+        });
+        await Promise.all(workers);
+    }
+
     if (isMasterScan) {
       const db = await getDatabase();
-
-      // Pre-fetch recent alerts to prevent massive connection pooling
       const recentAlerts = await db.collection('sent_alerts').find({
         timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
       }).toArray();
@@ -96,21 +109,17 @@ export async function POST(request: Request) {
 
       const pendingInserts: any[] = [];
 
-      const validationPromises = discoveredTokens.map(async (token) => {
-        // Time guard: Don't start new validation if we're past 8.5 seconds
-        if (Date.now() - startTime > 8500) {
-          console.log('Master Scan: 8.5s threshold reached, skipping remaining tokens');
-          return null;
-        }
-
+      await processWithConcurrency(discoveredTokens, 3, async (token) => {
         try {
           scannedCount++;
-          // Skip AI analysis for Cron if we're running out of time (7s+)
           const skipAI = (Date.now() - startTime > 7000);
+          
+          // Note: Bundle detector is skipped in master scan if orchestrated purely by CRON A/B, but 
+          // keeping the parameter passing consistent.
           const alert = await createEnhancedAlert(token, {
             ...masterSettings,
             aiMode: skipAI ? undefined : masterSettings.aiMode
-          });
+          }, true);
 
           let sentToAnyUser = false;
           for (const user of usersToAlert) {
@@ -136,30 +145,22 @@ export async function POST(request: Request) {
                 recentAlertsSet.add(alertKey);
                 
                 sentToAnyUser = true;
-                console.log(`[Alert Sent] ${token.symbol} sent to ${user.email}`);
-              } else {
-                console.log(`[Alert Skipped] ${token.symbol} for ${user.email}: lastSent: ${!!lastSent}, enabled: ${userSettings.enableTelegramAlerts}, chatId: ${!!user.telegramChatId}`);
               }
-            } else {
-              console.log(`[Rejection] ${token.symbol} for ${user.email}: Liquidity: ${token.liquidity}/${userSettings.minLiquidity} (${meetsLiquidity}), Holders: ${token.topHolderPercent}/${userSettings.maxTopHolderPercent} (${meetsHolders}), Score: ${alert.compositeScore}/${userSettings.minCompositeScore} (${meetsScore})`);
             }
           }
           if (sentToAnyUser) validCount++;
-          return true;
         } catch (e) {
           console.error(`Validation failed for ${token.symbol}:`, e);
-          return null;
         }
       });
-
-      await Promise.all(validationPromises);
 
       if (pendingInserts.length > 0) {
           await db.collection('sent_alerts').insertMany(pendingInserts);
       }
     } else {
       // SEQUENTIAL MODE FOR USER (Dashboard UI visibility)
-      for (const token of discoveredTokens) {
+      // Limit to max 5 tokens for UI so it doesn't wait forever
+      await processWithConcurrency(discoveredTokens.slice(0, 5), 2, async (token) => {
         scannedCount++;
         try {
           const alert = await createEnhancedAlert(token, masterSettings);
@@ -173,7 +174,6 @@ export async function POST(request: Request) {
             alerts.push(alert);
             validCount++;
 
-            // Optional: User-triggered scans also send Telegram if enabled
             if (userSettings.enableTelegramAlerts && user.telegramChatId) {
               const db = await getDatabase();
               const lastSent = await db.collection('sent_alerts').findOne({
@@ -197,7 +197,7 @@ export async function POST(request: Request) {
         } catch (tokenError) {
           console.error(`Error validating token ${token.symbol}:`, tokenError);
         }
-      }
+      });
     }
 
     return NextResponse.json({

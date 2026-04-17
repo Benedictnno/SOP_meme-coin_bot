@@ -27,7 +27,28 @@ export async function GET(request: NextRequest) {
             .sort({ createdAt: -1 })
             .toArray();
 
-        return NextResponse.json({ success: true, wallets });
+        // Enrich with performance data if it exists in the global whale directory
+        const addresses = wallets.map(w => w.address);
+        const whaleData = await db.collection('whale_wallets')
+            .find({ address: { $in: addresses } })
+            .toArray();
+            
+        const whaleMap = new Map(whaleData.map(w => [w.address, w]));
+
+        const enrichedWallets = wallets.map(w => {
+            const performance = whaleMap.get(w.address);
+            return {
+                ...w,
+                performance: performance ? {
+                    winRate: performance.winRate || 0,
+                    avgReturn: performance.avgReturn || 0,
+                    successfulTrades: performance.successfulTrades || 0,
+                    nickname: performance.nickname
+                } : null
+            };
+        });
+
+        return NextResponse.json({ success: true, wallets: enrichedWallets });
     } catch (error) {
         console.error('List wallets error:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });

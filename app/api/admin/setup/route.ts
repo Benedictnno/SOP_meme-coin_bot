@@ -10,7 +10,13 @@ import { getDatabase } from '@/lib/mongodb';
 export async function POST(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
-        const expectedSecret = process.env.ADMIN_PROMOTION_SECRET || process.env.CRON_SECRET; // fallback for backwards compatibility
+        const expectedSecret = process.env.ADMIN_PROMOTION_SECRET;
+
+        // If no admin secret is configured, deny all requests for safety
+        if (!expectedSecret) {
+            console.error('ADMIN_PROMOTION_SECRET is not configured.');
+            return NextResponse.json({ success: false, error: 'Setup disabled' }, { status: 403 });
+        }
 
         if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });

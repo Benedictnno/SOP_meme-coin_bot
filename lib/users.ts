@@ -9,9 +9,9 @@ export interface User {
     solanaAddress?: string;
     telegramChatId?: string;
     role: 'user' | 'admin';
-    freeTrialStartedAt?: string;
-    subscriptionExpiresAt?: string;
-    createdAt: string;
+    freeTrialStartedAt?: Date | string;
+    subscriptionExpiresAt?: Date | string;
+    createdAt: Date | string;
     onboardingCompleted?: boolean;
     signupIp?: string;
     trialDenied?: boolean;
@@ -39,7 +39,7 @@ export async function createUser(email: string, passwordHash: string, signupIp?:
         email,
         password: passwordHash,
         role: 'user',
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(),
         onboardingCompleted: false,
         signupIp: signupIp || undefined,
         trialDenied: trialDenied || false,
@@ -59,7 +59,7 @@ export async function createUser(email: string, passwordHash: string, signupIp?:
     return { ...newUser, _id: result.insertedId };
 }
 
-export async function updateUserSubscription(userId: string, expiresAt: string) {
+export async function updateUserSubscription(userId: string, expiresAt: Date) {
     const db = await getDatabase();
     await db.collection('users').updateOne(
         { _id: new ObjectId(userId) },
@@ -85,13 +85,17 @@ export async function hasActiveSubscription(user: User): Promise<boolean> {
 
     // 1. Check paid subscription
     if (user.subscriptionExpiresAt) {
-        const expiry = new Date(user.subscriptionExpiresAt);
+        const expiry = user.subscriptionExpiresAt instanceof Date 
+            ? user.subscriptionExpiresAt 
+            : new Date(user.subscriptionExpiresAt);
         if (expiry > now) return true;
     }
 
     // 2. Check 21-day Free Trial (from createdAt)
-    const createdAt = new Date(user.createdAt);
-    const trialExpiry = new Date(createdAt.getTime() + 21 * 24 * 60 * 60 * 1000);
+    const createdAtTime = user.createdAt instanceof Date 
+        ? user.createdAt 
+        : new Date(user.createdAt);
+    const trialExpiry = new Date(createdAtTime.getTime() + 21 * 24 * 60 * 60 * 1000);
 
     if (trialExpiry > now) {
         return true;
@@ -119,16 +123,18 @@ export async function getAllActiveUsers(): Promise<User[]> {
     const db = await getDatabase();
     const now = new Date();
     const trialPeriodMs = 21 * 24 * 60 * 60 * 1000;
-    const trialCutoffDate = new Date(now.getTime() - trialPeriodMs).toISOString();
+    const trialCutoffDate = new Date(now.getTime() - trialPeriodMs);
 
     return await db.collection<User>('users').find({
         $or: [
             // Admin role is always active
             { role: 'admin' },
-            // Active paid subscription
+            // Active paid subscription (handle both Date and legacy string types in DB if necessary, but Date object is preferred)
+            { subscriptionExpiresAt: { $gt: now } },
             { subscriptionExpiresAt: { $gt: now.toISOString() } },
             // Active free trial (less than 21 days old)
-            { createdAt: { $gt: trialCutoffDate } }
+            { createdAt: { $gt: trialCutoffDate } },
+            { createdAt: { $gt: trialCutoffDate.toISOString() } }
         ]
     }).toArray();
 }

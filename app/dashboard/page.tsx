@@ -89,7 +89,9 @@ export default function EnhancedAnalyticsDashboard() {
 
           // Show paywall banner if trial has expired and no paid subscription
           const hasActiveSub = data.subscriptionExpiresAt && new Date(data.subscriptionExpiresAt) > new Date();
-          if (trialDaysLeft === 0 && !hasActiveSub) {
+          const isAdmin = data.role === 'admin' || (session?.user as any)?.role === 'admin';
+          
+          if (trialDaysLeft === 0 && !hasActiveSub && !isAdmin) {
             setSubscriptionExpired(true);
           }
 
@@ -400,6 +402,7 @@ export default function EnhancedAnalyticsDashboard() {
             saveSuccess={saveSuccess}
             onTestTelegram={onTestTelegram}
             subscriptionInfo={subscriptionInfo}
+            userRole={(session?.user as any)?.role}
           />
         )}
 

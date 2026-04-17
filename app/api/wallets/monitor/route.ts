@@ -17,6 +17,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
     try {
+        // Verify cron secret for security
+        const authHeader = request.headers.get('authorization');
+        const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
+
+        if (authHeader !== expectedAuth) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
         // 1. Get all tracked wallets
         const db = await getDatabase();
         const allTracked = await db.collection<TrackedWallet>('tracked_wallets').find({}).toArray();
@@ -91,8 +99,11 @@ export async function GET(request: NextRequest) {
                     { $set: { lastNotifiedTx: latestTx } }
                 );
 
+                // 6. Rate-limit delay (150ms for Helius)
+                await new Promise(res => setTimeout(res, 150));
+
             } catch (err) {
-                console.error(`Error monitoring wallet ${wallet.address}:`, err);
+                 console.error(`Error monitoring wallet ${wallet.address}:`, err);
             }
         }
 

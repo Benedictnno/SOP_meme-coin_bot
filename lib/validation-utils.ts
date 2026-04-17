@@ -7,9 +7,10 @@ import { validateTokenEnhanced } from './sop-validator';
  */
 export async function createEnhancedAlert(
     token: TokenData,
-    settings: BotSettings
+    settings: BotSettings,
+    skipBundleDetector: boolean = false
 ): Promise<EnhancedAlert> {
-    const validationResult = await validateTokenEnhanced(token, settings);
+    const validationResult = await validateTokenEnhanced(token, settings, skipBundleDetector);
 
     // Calculate composite score
     const baseScore = validationResult.rugCheckScore * 0.4;
@@ -51,7 +52,17 @@ export async function createEnhancedAlert(
     else recommendations.push('🔴 AVOID - High risk');
 
     if (validationResult.enhancements.txPatterns.suspiciousPatterns.length > 0) recommendations.push('⚠️ Suspicious Patterns Detected');
-    if (validationResult.enhancements.whaleActivity.involved) recommendations.push('🐋 Whale Wallets Involved');
+    
+    if (validationResult.enhancements.whaleActivity.involved) {
+        let whaleDetails = '🐋 Whale Wallets Involved';
+        if (validationResult.enhancements.whaleActivity.wallets && validationResult.enhancements.whaleActivity.wallets.length > 0) {
+            whaleDetails += ` (${validationResult.enhancements.whaleActivity.wallets.length} tracked whales)`;
+            // We could lookup the DB here for specific winrates, but to keep alert creation purely synchronous to its params:
+            recommendations.push(whaleDetails);
+        } else {
+            recommendations.push(whaleDetails);
+        }
+    }
     if (validationResult.enhancements.bundleAnalysis.isBundled) recommendations.push('⛔ BUNDLED LAUNCH - Avoid');
     if (validationResult.enhancements.devScore && validationResult.enhancements.devScore.reputation === 'High') recommendations.push('⭐ Trusted Developer History');
 

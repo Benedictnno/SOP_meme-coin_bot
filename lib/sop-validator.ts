@@ -4,21 +4,35 @@
 import { ValidationChecks, TokenData, BotSettings } from '@/types';
 import { validateContract } from './validators/rugcheck';
 import { testSellability } from './validators/jupiter';
-import { getHolderDistribution, getWhaleActivity } from './validators/helius';
+import { getHolderDistribution } from './validators/helius';
 import { getTokenCreator, getDeveloperCreditScore } from './validators/dev-score';
 import { detectBundledLaunch } from './validators/bundle-detector';
 import { analyzeTokenNarrative, AIAnalysis } from './validators/gemini';
+import { checkWhaleActivity } from './optimizations/whale-tracker';
+import { getDatabase } from '@/lib/mongodb';
 
-// Helper for local storage that mimics the expected API
+// Helper for database storage that mimics the old API
 const simpleStorage = {
     get: async (key: string) => {
-        if (typeof window === 'undefined') return null;
-        const value = window.localStorage.getItem(key);
-        return value ? { value } : null;
+        try {
+            const db = await getDatabase();
+            const result = await db.collection('app_state').findOne({ key });
+            return result ? { value: result.value } : null;
+        } catch (e) {
+            console.error('Storage get error:', e);
+            return null;
+        }
     },
     set: async (key: string, value: string) => {
-        if (typeof window !== 'undefined') {
-            window.localStorage.setItem(key, value);
+        try {
+            const db = await getDatabase();
+            await db.collection('app_state').updateOne(
+                { key },
+                { $set: { key, value } },
+                { upsert: true }
+            );
+        } catch (e) {
+            console.error('Storage set error:', e);
         }
     }
 };
@@ -390,14 +404,13 @@ export function scoreSocialSignals(socials?: TokenData['socials']): {
     // Bonus for having ALL socials (community completeness)
     if (socials.website && socials.twitter && socials.telegram) score += 10;
 
-    // Randomized engagement proxy (simulates actual engagement variance)
-    const engagementVariance = Math.floor(Math.random() * 20) - 5; // -5 to +15
-    score = Math.max(10, Math.min(100, score + engagementVariance));
+    // Cap between 10-100
+    score = Math.max(10, Math.min(100, score));
 
     return {
         overallScore: score,
         sentiment: score > 60 ? 'bullish' : score > 35 ? 'neutral' : 'weak',
-        twitterMentions: socials?.twitter ? Math.floor(Math.random() * 50) + 5 : 0
+        twitterMentions: socials?.twitter ? 50 : 0
     };
 }
 
@@ -447,7 +460,8 @@ export async function checkQuickOnChainSecurity(mint: string): Promise<{
  */
 export async function validateTokenEnhanced(
     token: TokenData,
-    settings: BotSettings
+    settings: BotSettings,
+    skipBundleDetector: boolean = false
 ): Promise<{
     checks: ValidationChecks;
     rugCheckScore: number;
@@ -460,7 +474,7 @@ export async function validateTokenEnhanced(
         marketContext: { isRiskOn: boolean; solTrend: string; shouldTrade: boolean };
         narrativeQuality: { score: number; signals: string[]; warnings: string[] };
         socialSignals: { overallScore: number; sentiment: string; twitterMentions: number };
-        whaleActivity: { involved: boolean; confidence: number; score: number };
+        whaleActivity: { involved: boolean; confidence: number; score: number; wallets?: string[] };
         devScore: { score: number; reputation: string; details: string[] } | null;
         bundleAnalysis: { isBundled: boolean; bundlePercentage: number; sybilCount: number; details: string[] };
         aiAnalysis: AIAnalysis | null;
@@ -521,7 +535,7 @@ export async function validateTokenEnhanced(
         testSellability(token.mint),
         getHolderDistribution(token.mint),
         analyzeTransactionPatterns(token.mint),
-        detectBundledLaunch(token.mint),
+        detectBundledLaunch(token.mint, skipBundleDetector),
         checkLiquidityStability(token.mint, token.liquidity)
     ]);
 
@@ -561,7 +575,12 @@ export async function validateTokenEnhanced(
     const [devScore, aiAnalysis, whaleActivity, pumpData] = await Promise.all([
         creatorAddress ? getDeveloperCreditScore(creatorAddress) : Promise.resolve(null),
         analyzeTokenNarrative(token, settings.aiMode),
-        getWhaleActivity(token.mint),
+        checkWhaleActivity(token.mint).then(res => ({
+            involved: res.whaleInvolved,
+            confidence: res.confidence,
+            score: res.score,
+            wallets: res.wallets
+        })),
         isPumpFun ? import('./validators/pump-tracker').then(m => m.analyzePumpFunToken(token.mint)) : Promise.resolve(null)
     ]);
 

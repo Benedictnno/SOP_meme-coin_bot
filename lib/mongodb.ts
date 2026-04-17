@@ -55,3 +55,23 @@ export async function getDatabase(): Promise<Db> {
     return client.db(dbName); // Uses dbName if provided, otherwise uses the default from URI
 }
 
+export async function ensureIndexes() {
+    try {
+        const db = await getDatabase();
+        
+        // Compound index for tracking sent alerts efficiently to avoid scanning all user alerts
+        await db.collection('sent_alerts').createIndex({ userId: 1, mint: 1, timestamp: 1 });
+        
+        // Optimize querying users by subscriptions and telegram interaction
+        await db.collection('users').createIndex({ telegramChatId: 1 });
+        await db.collection('users').createIndex({ subscriptionExpiresAt: 1 });
+        
+        // Fast tracking of existing signals by token mint
+        await db.collection('signals').createIndex({ 'token.mint': 1 });
+        await db.collection('whale_wallets').createIndex({ address: 1 }, { unique: true });
+        await db.collection('wallet_pnl').createIndex({ walletAddress: 1, tokenMint: 1 });
+        console.log('MongoDB Indexes initialized successfully.');
+    } catch (error) {
+        console.error('Error initializing MongoDB indexes:', error);
+    }
+}
