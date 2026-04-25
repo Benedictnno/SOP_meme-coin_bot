@@ -131,10 +131,8 @@ export async function getAllActiveUsers(): Promise<User[]> {
             { role: 'admin' },
             // Active paid subscription (handle both Date and legacy string types in DB if necessary, but Date object is preferred)
             { subscriptionExpiresAt: { $gt: now } },
-            { subscriptionExpiresAt: { $gt: now.toISOString() } },
             // Active free trial (less than 21 days old)
-            { createdAt: { $gt: trialCutoffDate } },
-            { createdAt: { $gt: trialCutoffDate.toISOString() } }
+            { createdAt: { $gt: trialCutoffDate } }
         ]
     }).toArray();
 }

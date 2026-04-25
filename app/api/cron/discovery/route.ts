@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { scanDEXScreener } from '@/lib/validators/dexscreener';
 import { getDatabase } from '@/lib/mongodb';
 
@@ -13,10 +15,13 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+        const isAdmin = session?.user && (session.user as any).role === 'admin';
+
         const authHeader = request.headers.get('authorization');
         const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
 
-        if (authHeader !== expectedAuth) {
+        if (authHeader !== expectedAuth && !isAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 

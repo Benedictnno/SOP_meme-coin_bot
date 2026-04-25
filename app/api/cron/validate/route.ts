@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { getDatabase } from '@/lib/mongodb';
 import { createEnhancedAlert } from '@/lib/validation-utils';
 import { sendTelegramAlert } from '@/lib/telegram';
@@ -16,10 +18,13 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+        const isAdmin = session?.user && (session.user as any).role === 'admin';
+
         const authHeader = request.headers.get('authorization');
         const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
 
-        if (authHeader !== expectedAuth) {
+        if (authHeader !== expectedAuth && !isAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -84,14 +89,14 @@ export async function GET(request: NextRequest) {
                     const userSettings = user.settings || masterSettings;
                     const meetsLiquidity = tokenData.liquidity >= (userSettings.minLiquidity || 0);
                     const meetsHolders = (tokenData.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100);
-                    const meetsScore = alert.compositeScore >= (userSettings.minCompositeScore || 0);
+                    const meetsScore = alert.compositeScore >= 30; // Temporarily lowered from (userSettings.minCompositeScore || 0)
 
                     if (meetsLiquidity && meetsHolders && meetsScore) {
                         const userIdStr = user._id?.toString() || 'unknown';
                         const alertKey = `${userIdStr}-${tokenData.mint}`;
                         const lastSent = recentAlertsSet.has(alertKey);
 
-                        if (!lastSent && userSettings.enableTelegramAlerts && user.telegramChatId) {
+                        if (!lastSent && (userSettings.enableTelegramAlerts ?? true) && user.telegramChatId) {
                             await sendTelegramAlert(alert, user.telegramChatId);
                             
                             pendingInserts.push({

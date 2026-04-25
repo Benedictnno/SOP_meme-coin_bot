@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Users, DollarSign, Shield, Activity, Search, Trash2, Calendar, CheckCircle, XCircle, ChevronRight, BarChart3, Loader2 } from 'lucide-react';
+import { Users, DollarSign, Shield, Activity, Search, Trash2, Calendar, CheckCircle, XCircle, ChevronRight, BarChart3, Loader2, Play } from 'lucide-react';
 
 interface Stats {
     totalUsers: number;
@@ -27,6 +27,23 @@ export default function AdminDashboard() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [triggerStatus, setTriggerStatus] = useState<{ [key: string]: string }>({});
+
+    const triggerCron = async (endpoint: string, name: string) => {
+        setTriggerStatus(prev => ({ ...prev, [name]: 'Running...' }));
+        try {
+            const res = await fetch(endpoint);
+            const data = await res.json();
+            if (data.success || data.message || data.processed !== undefined || data.monitored !== undefined) {
+                setTriggerStatus(prev => ({ ...prev, [name]: 'Success' }));
+            } else {
+                setTriggerStatus(prev => ({ ...prev, [name]: 'Failed' }));
+            }
+        } catch (err) {
+            setTriggerStatus(prev => ({ ...prev, [name]: 'Error' }));
+        }
+        setTimeout(() => setTriggerStatus(prev => ({ ...prev, [name]: '' })), 3000);
+    };
 
     useEffect(() => {
         if (status === 'unauthenticated' || (status === 'authenticated' && (session.user as any).role !== 'admin')) {
@@ -77,6 +94,36 @@ export default function AdminDashboard() {
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">System Control</h1>
                         <p className="text-xs text-neutral-500 font-bold uppercase tracking-[0.2em] mt-1">Admin Oversight Console</p>
+                    </div>
+                </div>
+
+                {/* Manual Cron Controls */}
+                <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400">Manual Cron Controls</h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <button 
+                            onClick={() => triggerCron('/api/cron/discovery', 'Discovery')}
+                            className="flex items-center justify-between p-4 rounded-lg bg-neutral-950 border border-neutral-800 hover:border-purple-500/50 transition-colors"
+                        >
+                            <span className="text-sm font-bold text-neutral-200">Run Discovery</span>
+                            <span className="text-xs text-purple-400">{triggerStatus['Discovery'] || <Play className="w-4 h-4" />}</span>
+                        </button>
+                        <button 
+                            onClick={() => triggerCron('/api/cron/validate', 'Validate')}
+                            className="flex items-center justify-between p-4 rounded-lg bg-neutral-950 border border-neutral-800 hover:border-purple-500/50 transition-colors"
+                        >
+                            <span className="text-sm font-bold text-neutral-200">Run Validation</span>
+                            <span className="text-xs text-purple-400">{triggerStatus['Validate'] || <Play className="w-4 h-4" />}</span>
+                        </button>
+                        <button 
+                            onClick={() => triggerCron('/api/wallets/monitor', 'Monitor')}
+                            className="flex items-center justify-between p-4 rounded-lg bg-neutral-950 border border-neutral-800 hover:border-purple-500/50 transition-colors"
+                        >
+                            <span className="text-sm font-bold text-neutral-200">Run Monitor</span>
+                            <span className="text-xs text-purple-400">{triggerStatus['Monitor'] || <Play className="w-4 h-4" />}</span>
+                        </button>
                     </div>
                 </div>
 

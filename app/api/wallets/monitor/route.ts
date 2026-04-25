@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { getDatabase } from '@/lib/mongodb';
 import { TrackedWallet, BotSettings } from '@/types';
 import { getWalletActivity } from '@/lib/validators/helius';
@@ -17,11 +19,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
     try {
-        // Verify cron secret for security
+        // Verify cron secret or admin session for security
+        const session = await getServerSession(authOptions);
+        const isAdmin = session?.user && (session.user as any).role === 'admin';
+
         const authHeader = request.headers.get('authorization');
         const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
 
-        if (authHeader !== expectedAuth) {
+        if (authHeader !== expectedAuth && !isAdmin) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 

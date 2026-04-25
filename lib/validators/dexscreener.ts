@@ -120,7 +120,7 @@ export async function scanDEXScreener(volumeThreshold: number = 200): Promise<To
         // 3. Calculate volume increase (run-rate comparison)
         const volumeChange = pair.volume.h24 > 0
           ? ((pair.volume.h1 * 24) / pair.volume.h24) * 100
-          : 0;
+          : pair.volume.h1 > 0 ? 999 : 0;
 
         // 4. Check liquidity (Permissive discovery at 1k)
         const liquidity = pair.liquidity?.usd || 0;
@@ -157,7 +157,7 @@ export async function scanDEXScreener(volumeThreshold: number = 200): Promise<To
     return selectedTokens.map((pair: DexPair): TokenData => {
       const volumeChange = pair.volume.h24 > 0
         ? ((pair.volume.h1 * 24) / pair.volume.h24) * 100
-        : 0;
+        : pair.volume.h1 > 0 ? 999 : 0;
 
       const socials = {
         twitter: pair.info?.socials?.find((s: any) => s.type === 'twitter')?.url,

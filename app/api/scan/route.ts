@@ -103,7 +103,7 @@ export async function POST(request: Request) {
     if (isMasterScan) {
       const db = await getDatabase();
       const recentAlerts = await db.collection('sent_alerts').find({
-        timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+        timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
       }).toArray();
       const recentAlertsSet = new Set(recentAlerts.map(a => `${a.userId}-${a.mint}`));
 
@@ -126,13 +126,13 @@ export async function POST(request: Request) {
             const userSettings = user.settings || masterSettings;
             const meetsLiquidity = token.liquidity >= (userSettings.minLiquidity || 0);
             const meetsHolders = (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100);
-            const meetsScore = alert.compositeScore >= (userSettings.minCompositeScore || 0);
+            const meetsScore = alert.compositeScore >= 30; // Temporarily lowered from (userSettings.minCompositeScore || 0)
 
             if (meetsLiquidity && meetsHolders && meetsScore) {
               const alertKey = `${user._id.toString()}-${token.mint}`;
               const lastSent = recentAlertsSet.has(alertKey);
 
-              if (!lastSent && userSettings.enableTelegramAlerts && user.telegramChatId) {
+              if (!lastSent && (userSettings.enableTelegramAlerts ?? true) && user.telegramChatId) {
                 await sendTelegramAlert(alert, user.telegramChatId);
                 
                 pendingInserts.push({
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
                   mint: token.mint,
                   symbol: token.symbol,
                   type: 'alert',
-                  timestamp: new Date().toISOString()
+                  timestamp: new Date()
                 });
                 recentAlertsSet.add(alertKey);
                 
@@ -169,17 +169,17 @@ export async function POST(request: Request) {
 
           if (token.liquidity >= (userSettings.minLiquidity || 0) &&
             (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100) &&
-            alert.compositeScore >= (userSettings.minCompositeScore || 0)) {
+            alert.compositeScore >= 30) { // Temporarily lowered from (userSettings.minCompositeScore || 0)
 
             alerts.push(alert);
             validCount++;
 
-            if (userSettings.enableTelegramAlerts && user.telegramChatId) {
+            if ((userSettings.enableTelegramAlerts ?? true) && user.telegramChatId) {
               const db = await getDatabase();
               const lastSent = await db.collection('sent_alerts').findOne({
                 userId: user._id.toString(),
                 mint: token.mint,
-                timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+                timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
               });
 
               if (!lastSent) {
@@ -189,7 +189,7 @@ export async function POST(request: Request) {
                   mint: token.mint,
                   symbol: token.symbol,
                   type: 'alert',
-                  timestamp: new Date().toISOString()
+                  timestamp: new Date()
                 });
               }
             }

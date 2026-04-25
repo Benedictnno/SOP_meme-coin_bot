@@ -19,6 +19,20 @@ export const authOptions: NextAuthOptions = {
                     throw new Error("Invalid credentials");
                 }
 
+                // Check hardcoded admin from ENV
+                if (
+                    process.env.ADMIN_EMAIL &&
+                    process.env.ADMIN_PASSWORD &&
+                    credentials.email === process.env.ADMIN_EMAIL &&
+                    credentials.password === process.env.ADMIN_PASSWORD
+                ) {
+                    return {
+                        id: "admin-env",
+                        email: process.env.ADMIN_EMAIL,
+                        role: "admin",
+                    };
+                }
+
                 const user = await getUserByEmail(credentials.email);
 
                 if (!user || !user.password) {

@@ -74,9 +74,9 @@ export async function checkTokenFreshness(mint: string): Promise<{
         const ageMs = Date.now() - blockTime;
         const ageMinutes = Math.floor(ageMs / 60000);
 
-        // Token must be less than 2 hours old (120 minutes)
+        // Token must be less than 24 hours old (1440 minutes) to allow DEX Screener trending
         return {
-            isFresh: ageMinutes < 120,
+            isFresh: ageMinutes < 1440,
             ageMinutes
         };
 
