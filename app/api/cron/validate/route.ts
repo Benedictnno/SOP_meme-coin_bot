@@ -128,6 +128,16 @@ export async function GET(request: NextRequest) {
         // Cleanup processed
         await pendingTokensColl.deleteMany({ mint: { $in: validatedMints } });
 
+        // Update total scanned tokens stat
+        if (validatedMints.length > 0) {
+            const statsColl = db.collection('system_stats');
+            await statsColl.updateOne(
+                { _id: 'global_stats' },
+                { $inc: { totalTokensScanned: validatedMints.length } },
+                { upsert: true }
+            );
+        }
+
         return NextResponse.json({
             success: true,
             processed: tokensToProcess.length,

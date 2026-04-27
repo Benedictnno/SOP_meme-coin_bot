@@ -30,7 +30,8 @@ export async function testSellability(
     const response = await fetch(`${JUPITER_QUOTE_API}/quote?${params}`, {
       headers: {
         'Accept': 'application/json'
-      }
+      },
+      signal: AbortSignal.timeout(8000) // 8s timeout
     });
 
     if (!response.ok) {

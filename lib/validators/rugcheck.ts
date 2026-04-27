@@ -26,6 +26,13 @@ export async function validateContract(mintAddress: string): Promise<RugCheckRes
     }
 
     if (!response.ok) {
+      if (response.status === 400) {
+        return {
+          verified: false,
+          risks: ['Token too new for RugCheck index'],
+          score: 60 // Slightly higher score since it's just "new"
+        };
+      }
       console.warn(`RugCheck API error: ${response.status} for ${mintAddress}`);
       // Fail neutral rather than 0 so we don't block good tokens during API outages
       return {

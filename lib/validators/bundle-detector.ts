@@ -9,6 +9,7 @@ export async function detectBundledLaunch(mintAddress: string, skipRPC: boolean 
     sybilCount: number;
     details: string[];
 }> {
+    console.log(`[BundleDetector] Checking ${mintAddress}, skipRPC: ${skipRPC}`);
     if (skipRPC) {
         return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: ['Skipped during continuous cron validation'] };
     }
@@ -54,12 +55,32 @@ export async function detectBundledLaunch(mintAddress: string, skipRPC: boolean 
             })))
         });
 
-        const txsData = await txsResponse.json();
+        let txsData = await txsResponse.json();
 
         // Handle error responses (like 429 too many requests)
         if (txsData.error) {
-            console.warn(`Bundle Detector: RPC returned error [${txsData.error.code}] ${txsData.error.message}`);
-            return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: ['RPC Limit Reached'] };
+            if (txsData.error.code === -32413 || txsData.error.code === 429) {
+                console.warn(`[BundleDetector] Rate limited. Retrying with smaller batch...`);
+                await new Promise(r => setTimeout(r, 1500));
+                // Try again with just the first 3 txs (lower pressure)
+                const smallerBatch = firstSigs.slice(0, 3);
+                const retryResponse = await fetch(rpcUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(smallerBatch.map((sig: string, i: number) => ({
+                        jsonrpc: '2.0',
+                        id: `retry-${i}`,
+                        method: 'getTransaction',
+                        params: [sig, { maxSupportedTransactionVersion: 0, encoding: 'jsonParsed' }]
+                    })))
+                });
+                const retryData = await retryResponse.json();
+                if (retryData.error) return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: ['RPC Limit Reached'] };
+                txsData = retryData;
+            } else {
+                console.warn(`Bundle Detector: RPC returned error [${txsData.error.code}] ${txsData.error.message}`);
+                return { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: ['RPC Limit Reached'] };
+            }
         }
 
         if (!Array.isArray(txsData)) {

@@ -480,7 +480,44 @@ export async function validateTokenEnhanced(
         aiAnalysis: AIAnalysis | null;
     };
 }> {
-    console.log(`[Tiered Validation] Starting for: ${token.symbol}`);
+    const defaultChecks: ValidationChecks = {
+        narrative: true,
+        attention: token.volumeIncrease > settings.minVolumeIncrease,
+        liquidity: token.liquidity > settings.minLiquidity,
+        volume: true,
+        contract: true,
+        holders: true,
+        sellTest: true
+    };
+
+    const defaultEnhancements = {
+        freshness: { isFresh: true, ageMinutes: 0 },
+        txPatterns: { isOrganic: true, suspiciousPatterns: [] },
+        liquidityStability: { isStable: true, liquidityChange: 0 },
+        marketContext: { isRiskOn: true, solTrend: 'neutral', shouldTrade: true },
+        narrativeQuality: { score: 50, signals: [], warnings: [] },
+        socialSignals: { overallScore: 50, sentiment: 'neutral', twitterMentions: 0 },
+        whaleActivity: { involved: false, confidence: 0, score: 50 },
+        devScore: null,
+        bundleAnalysis: { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: [] },
+        aiAnalysis: null
+    };
+
+    // GUARD: Never validate native SOL or Wrapped SOL
+    const SOL_MINTS = [
+        'So11111111111111111111111111111111111111112', // Native
+        'So11111111111111111111111111111111111111111'  // Wrapped
+    ];
+    if (SOL_MINTS.includes(token.mint)) {
+        console.log(`[Validator] Skipping native SOL/WSOL: ${token.mint}`);
+        return {
+            checks: defaultChecks,
+            rugCheckScore: 100,
+            risks: [],
+            tierReached: 0,
+            enhancements: defaultEnhancements
+        };
+    }
 
     // --- TIER 1: FAST FILTER (On-Chain & Context) ---
     const tier1StartTime = Date.now();
@@ -492,29 +529,9 @@ export async function validateTokenEnhanced(
 
     const tier1Passed = freshness.isFresh && marketContext.shouldTrade && quickSecurity.safe;
 
-    // Default values for skipping tiers
-    const defaultEnhancements = {
-        freshness,
-        txPatterns: { isOrganic: true, suspiciousPatterns: [] },
-        liquidityStability: { isStable: true, liquidityChange: 0 },
-        marketContext,
-        narrativeQuality: { score: 50, signals: [], warnings: [] },
-        socialSignals: { overallScore: 50, sentiment: 'neutral', twitterMentions: 0 },
-        whaleActivity: { involved: false, confidence: 0, score: 50 },
-        devScore: null,
-        bundleAnalysis: { isBundled: false, bundlePercentage: 0, sybilCount: 0, details: [] },
-        aiAnalysis: null
-    };
-
-    const defaultChecks: ValidationChecks = {
-        narrative: true,
-        attention: token.volumeIncrease > settings.minVolumeIncrease,
-        liquidity: token.liquidity > settings.minLiquidity,
-        volume: true,
-        contract: quickSecurity.safe,
-        holders: true,
-        sellTest: true
-    };
+    // Use the results from Tier 1 for the skipping default objects
+    Object.assign(defaultEnhancements, { freshness, marketContext });
+    defaultChecks.contract = quickSecurity.safe;
 
     if (!tier1Passed) {
         console.log(`[Tier 1 FAILED] ${token.symbol} - Skipping further tiers`);
@@ -530,14 +547,20 @@ export async function validateTokenEnhanced(
 
     // --- TIER 2: SECURITY & PATTERNS ---
     const tier2StartTime = Date.now();
-    const [contractCheck, sellTest, holderData, txPatterns, bundleAnalysis, liquidityStability] = await Promise.all([
-        validateContract(token.mint),
-        testSellability(token.mint),
-        getHolderDistribution(token.mint),
-        analyzeTransactionPatterns(token.mint),
-        detectBundledLaunch(token.mint, skipBundleDetector),
-        checkLiquidityStability(token.mint, token.liquidity)
-    ]);
+    const contractCheck = await validateContract(token.mint);
+    
+    // Stagger RPC-heavy calls to avoid Helius burst rate limits
+    const sellTest = await testSellability(token.mint);
+    await new Promise(r => setTimeout(r, 200));
+    
+    const holderData = await getHolderDistribution(token.mint);
+    await new Promise(r => setTimeout(r, 200));
+    
+    const txPatterns = await analyzeTransactionPatterns(token.mint);
+    await new Promise(r => setTimeout(r, 200));
+    
+    const bundleAnalysis = await detectBundledLaunch(token.mint, skipBundleDetector);
+    const liquidityStability = await checkLiquidityStability(token.mint, token.liquidity);
 
     const tier2Passed = contractCheck.verified && sellTest.canSell && (holderData.topHolderPercent < settings.maxTopHolderPercent) && !bundleAnalysis.isBundled;
 
@@ -638,6 +661,15 @@ export function shouldValidateEnhanced(
     token: TokenData,
     settings: BotSettings
 ): { shouldValidate: boolean; reason?: string } {
+    // GUARD: Never validate native SOL or Wrapped SOL
+    const SOL_MINTS = [
+        'So11111111111111111111111111111111111111112',
+        'So11111111111111111111111111111111111111111'
+    ];
+    if (SOL_MINTS.includes(token.mint)) {
+        return { shouldValidate: false, reason: 'Native SOL/WSOL' };
+    }
+
 
     // Quick narrative check
     const narrativeScore = scoreNarrative(token.narrative, token.symbol);
