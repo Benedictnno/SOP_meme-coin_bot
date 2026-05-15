@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
         console.log(`User ${user.email} searching for: ${query}`);
 
         // If query looks like a mint address, try getting details directly first
-        let discoveredTokens = [];
+        const discoveredTokens = [];
         if (query.length >= 32 && !query.includes(' ')) {
             const directToken = await getTokenDetails(query);
             if (directToken) {

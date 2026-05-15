@@ -97,7 +97,7 @@ export async function detectBundledLaunch(mintAddress: string, skipRPC: boolean 
         const creationBlockTxs = transactions.filter((tx: any) => tx.slot === creationSlot);
 
         let buyCount = 0;
-        let totalBoughtAmount = 0;
+        const totalBoughtAmount = 0;
         const uniqueWallets = new Set();
 
         // Note: Detecting "buys" in a complex way is hard without parseTransaction

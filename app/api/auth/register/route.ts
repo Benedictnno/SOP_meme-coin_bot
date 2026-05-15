@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
         // --- IP Abuse Check ---
         // Find any user from same IP whose free trial has already expired
-        let trialDenied = false;
+        const trialDenied = false;
         if (clientIp !== 'unknown') {
             const trialPeriodMs = 21 * 24 * 60 * 60 * 1000;
             const existingFromIp = await db.collection('users').findOne({ signupIp: clientIp });

@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
                 // 3. Process new swaps
                 for (const swap of newSwaps.reverse()) { // Process oldest first
                     let validation = null;
-                    let enrichedSwap = { ...swap };
+                    const enrichedSwap = { ...swap };
 
                     try {
                         const token = await getTokenDetails(swap.tokenMint);

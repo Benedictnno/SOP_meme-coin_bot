@@ -208,7 +208,7 @@ async function handleSearchCommand(chatId: string, text: string) {
         };
 
         // Discovery Logic
-        let discoveredTokens = [];
+        const discoveredTokens = [];
         if (query.length >= 32 && !query.includes(' ')) {
             const directToken = await getTokenDetails(query);
             if (directToken) discoveredTokens.push(directToken);

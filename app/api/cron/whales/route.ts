@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         const activeWhales = await getKnownWhales();
         
         let processedSwaps = 0;
-        let activeTokens = new Map<string, Set<string>>(); // tokenMint -> set of walletAddresses
+        const activeTokens = new Map<string, Set<string>>(); // tokenMint -> set of walletAddresses
 
         const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 

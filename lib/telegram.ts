@@ -298,7 +298,7 @@ export async function sendWalletActivityAlert(
       .replace(/>/g, '&gt;');
   };
 
-  let message = `
+  const message = `
 🔔 <b>WALLET TRACKER: ${typeEmoji}</b>
 
 <b>Wallet:</b> ${escapeHTML(label)}

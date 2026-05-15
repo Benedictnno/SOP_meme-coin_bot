@@ -85,7 +85,7 @@ export async function getDeveloperCreditScore(creatorAddress: string): Promise<{
 
         const details: string[] = [];
         let score = 50; // Base score
-        let ruggedTokens = 0;
+        const ruggedTokens = 0;
 
         if (assets.length === 0) {
             return { score: 50, reputation: 'New', previousTokens: 0, ruggedTokens: 0, details: ['Brand new developer wallet'] };

@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
     // 1. Discover Tokens using Master Settings
     console.log(`Starting discovery scan with minVolume: ${masterSettings.minVolumeIncrease}%`);
-    let discoveredTokens = await scanDEXScreener(masterSettings.minVolumeIncrease);
+    const discoveredTokens = await scanDEXScreener(masterSettings.minVolumeIncrease);
 
     // OPTIMIZATION: We no longer limit to 5, we use Tier 1 to filter fast
     console.log(`Discovered ${discoveredTokens.length} potential tokens`);
