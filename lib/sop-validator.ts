@@ -596,8 +596,8 @@ export async function validateTokenEnhanced(
         (token.pairAddress === undefined && token.liquidity < 100000);
 
     const [devScore, aiAnalysis, whaleActivity, pumpData] = await Promise.all([
-        creatorAddress ? getDeveloperCreditScore(creatorAddress) : Promise.resolve(null),
-        import('./validation-utils').then(m => m.getOrCreateAIAnalysis(token, settings.aiMode)),
+        creatorAddress ? getDeveloperCreditScore(creatorAddress as string) : Promise.resolve(null),
+        import('./validation-utils').then(m => m.getOrCreateAIAnalysis(token, settings.aiMode || 'balanced')),
         checkWhaleActivity(token.mint).then(res => ({
             involved: res.whaleInvolved,
             confidence: res.confidence,

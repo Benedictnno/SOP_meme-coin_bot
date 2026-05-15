@@ -38,13 +38,10 @@ export async function GET() {
         db.collection('sent_alerts').countDocuments({
             timestamp: { $gt: oneHourAgo }
         }),
-        db.collection('pending_tokens').countDocuments({
-            source: 'helius_webhook',
-            discoveredAt: { $gt: fiveMinAgo }
-        })
+        db.collection('app_state').findOne({ key: 'helius_webhook_last_seen' })
     ]);
 
-    const webhookHealthy = webhookEvents > 0;
+    const webhookHealthy = webhookEvents && (now.getTime() - new Date(webhookEvents.timestamp).getTime()) < 5 * 60 * 1000;
 
     return NextResponse.json({
         timestamp: now.toISOString(),

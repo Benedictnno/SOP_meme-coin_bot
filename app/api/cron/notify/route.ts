@@ -85,9 +85,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        if (sentToAny) {
-            deliveredMints.push(delivery.mint);
-        }
+        deliveredMints.push(delivery.mint);
     }
 
     // Mark delivered items so they won't be re-sent

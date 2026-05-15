@@ -25,7 +25,7 @@ export async function GET() {
         const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
         // Fetch Tokens Scanned Stats
-        const globalStats = await db.collection("system_stats").findOne({ _id: "global_stats" });
+        const globalStats = await db.collection("system_stats").findOne({ _id: "global_stats" as any });
         const totalTokensScanned = globalStats?.totalTokensScanned || 0;
 
         // Fetch Valid Tokens Found (distinct mints in sent_alerts that are not 'convergence')

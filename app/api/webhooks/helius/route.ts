@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createEnhancedAlert } from '@/lib/validation-utils';
 import { BotSettings } from '@/types';
 import { getDatabase } from '@/lib/mongodb';
-import { sendTelegramAlert } from '@/lib/telegram';
 
 export async function POST(request: NextRequest) {
     try {
@@ -23,14 +22,13 @@ export async function POST(request: NextRequest) {
         console.log(`[Helius Webhook] Received ${payload.length} events`);
 
         const db = await getDatabase();
-        const activeUsers = await db.collection('users').find({
-            'settings.enableTelegramAlerts': true,
-            telegramChatId: { $exists: true, $ne: '' }
-        }).toArray();
-
-        if (activeUsers.length === 0) {
-            return NextResponse.json({ message: 'No active users to alert' });
-        }
+        
+        // 1. Write heartbeat for health monitoring
+        await db.collection('app_state').updateOne(
+            { key: 'helius_webhook_last_seen' },
+            { $set: { timestamp: new Date(), count: payload.length } },
+            { upsert: true }
+        );
 
         for (const event of payload) {
             // Robustly identify the target token mint
@@ -90,33 +88,8 @@ export async function POST(request: NextRequest) {
             const alert = await createEnhancedAlert(tokenData as any, masterSettings);
 
             if (alert.isValid) {
-                console.log(`[Helius Webhook] Valid token found: ${tokenData.symbol} (${tokenMint})`);
-
-                for (const user of activeUsers) {
-                    const userSettings = user.settings || masterSettings;
-
-                    // Filter based on user-specific score threshold
-                    if (alert.compositeScore >= (userSettings.minCompositeScore || 0)) {
-                        // Check if we sent this alert to this user recently
-                        const lastSent = await db.collection('sent_alerts').findOne({
-                            userId: user._id.toString(),
-                            mint: tokenMint,
-                            timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
-                        });
-
-                        if (!lastSent) {
-                            await sendTelegramAlert(alert, user.telegramChatId);
-                            await db.collection('sent_alerts').insertOne({
-                                userId: user._id.toString(),
-                                mint: tokenMint,
-                                symbol: tokenData.symbol,
-                                type: 'webhook_alert',
-                                timestamp: new Date().toISOString()
-                            });
-                            console.log(`[Helius Webhook] Alert sent to ${user.email} for ${tokenData.symbol}`);
-                        }
-                    }
-                }
+                console.log(`[Helius Webhook] Valid token processed and queued for delivery: ${tokenData.symbol} (${tokenMint})`);
+                // Delivery is handled by /api/cron/notify
             }
         }
 

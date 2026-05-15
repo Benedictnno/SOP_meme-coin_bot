@@ -30,12 +30,10 @@ export async function GET(request: NextRequest) {
         const db = await getDatabase();
 
         // Skip if webhook has been active in the last 5 minutes
-        const recentWebhookEvent = await db.collection('pending_tokens').findOne({
-            source: 'helius_webhook',
-            discoveredAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) }
-        });
+        const recentWebhookEvent = await db.collection('app_state').findOne({ key: 'helius_webhook_last_seen' });
+        const isWebhookActive = recentWebhookEvent && (Date.now() - new Date(recentWebhookEvent.timestamp).getTime() < 5 * 60 * 1000);
 
-        if (recentWebhookEvent) {
+        if (isWebhookActive) {
             return NextResponse.json({
                 success: true,
                 message: 'Webhook active — cron discovery skipped',

@@ -3,12 +3,12 @@ const nextConfig = {
   reactStrictMode: true,
   optimizeFonts: false,
 
-  // Ignore build errors for MVP deployment
+  // Removed ignore rules to enforce TS safety
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   // Enable experimental features
@@ -31,7 +31,7 @@ const nextConfig = {
         ],
       },
     ];
-  },
+  }, 
 
   // Environment variables exposed to client
   env: {

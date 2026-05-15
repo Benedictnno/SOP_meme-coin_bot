@@ -7,7 +7,6 @@ import { createEnhancedAlert } from '@/lib/validation-utils';
 import { BotSettings, EnhancedAlert } from '@/types';
 import { getUserById, hasActiveSubscription } from '@/lib/users';
 
-import { sendTelegramAlert } from '@/lib/telegram';
 import { getDatabase } from '@/lib/mongodb';
 import { getAllActiveUsers } from '@/lib/users';
 
@@ -66,36 +65,29 @@ export async function POST(request: Request) {
       const windowMs      = 60 * 1000;
       const maxRequests   = 5;
       const scanDb        = await getDatabase();
-      const rateRecord    = await scanDb.collection('app_state').findOne({ key: rateLimitKey });
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - windowMs);
 
-      if (rateRecord) {
-        const windowStart = new Date(rateRecord.windowStart);
-        const now         = new Date();
+      // 1. Reset old windows atomically
+      await scanDb.collection('app_state').updateOne(
+        { key: rateLimitKey, windowStart: { $lte: cutoff } },
+        { $set: { windowStart: now, count: 0 } }
+      );
 
-        if (now.getTime() - windowStart.getTime() < windowMs) {
-          if (rateRecord.count >= maxRequests) {
-            return NextResponse.json(
-              { success: false, error: 'Rate limit exceeded. Please wait before scanning again.' },
-              { status: 429 }
-            );
-          }
-          await scanDb.collection('app_state').updateOne(
-            { key: rateLimitKey },
-            { $inc: { count: 1 } }
-          );
-        } else {
-          // Reset window
-          await scanDb.collection('app_state').updateOne(
-            { key: rateLimitKey },
-            { $set: { windowStart: new Date(), count: 1 } }
-          );
-        }
-      } else {
-        await scanDb.collection('app_state').insertOne({
-          key: rateLimitKey,
-          windowStart: new Date(),
-          count: 1
-        });
+      // 2. Atomically increment and get
+      const result = await scanDb.collection('app_state').findOneAndUpdate(
+        { key: rateLimitKey },
+        { $inc: { count: 1 }, $setOnInsert: { windowStart: now } },
+        { upsert: true, returnDocument: 'after' }
+      );
+
+      const currentCount = result?.count || result?.value?.count || 1;
+
+      if (currentCount > maxRequests) {
+        return NextResponse.json(
+          { success: false, error: 'Rate limit exceeded. Please wait before scanning again.' },
+          { status: 429 }
+        );
       }
 
 
@@ -159,34 +151,9 @@ export async function POST(request: Request) {
             aiMode: skipAI ? undefined : masterSettings.aiMode
           }, true);
 
-          let sentToAnyUser = false;
-          for (const user of usersToAlert) {
-            const userSettings = user.settings || masterSettings;
-            const meetsLiquidity = token.liquidity >= (userSettings.minLiquidity || 0);
-            const meetsHolders = (token.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100);
-            const meetsScore = alert.compositeScore >= 30; // Temporarily lowered from (userSettings.minCompositeScore || 0)
-
-            if (meetsLiquidity && meetsHolders && meetsScore) {
-              const alertKey = `${user._id.toString()}-${token.mint}`;
-              const lastSent = recentAlertsSet.has(alertKey);
-
-              if (!lastSent && (userSettings.enableTelegramAlerts ?? true) && user.telegramChatId) {
-                await sendTelegramAlert(alert, user.telegramChatId);
-                
-                pendingInserts.push({
-                  userId: user._id.toString(),
-                  mint: token.mint,
-                  symbol: token.symbol,
-                  type: 'alert',
-                  timestamp: new Date()
-                });
-                recentAlertsSet.add(alertKey);
-                
-                sentToAnyUser = true;
-              }
-            }
-          }
-          if (sentToAnyUser) validCount++;
+          // Delivery is now fully handled by /api/cron/notify
+          // createEnhancedAlert handles saving to the delivery_queue
+          if (alert.compositeScore >= 30) validCount++;
         } catch (e) {
           console.error(`Validation failed for ${token.symbol}:`, e);
         }
@@ -211,26 +178,7 @@ export async function POST(request: Request) {
 
             alerts.push(alert);
             validCount++;
-
-            if ((userSettings.enableTelegramAlerts ?? true) && user.telegramChatId) {
-              const db = await getDatabase();
-              const lastSent = await db.collection('sent_alerts').findOne({
-                userId: user._id.toString(),
-                mint: token.mint,
-                timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-              });
-
-              if (!lastSent) {
-                await sendTelegramAlert(alert, user.telegramChatId);
-                await db.collection('sent_alerts').insertOne({
-                  userId: user._id.toString(),
-                  mint: token.mint,
-                  symbol: token.symbol,
-                  type: 'alert',
-                  timestamp: new Date()
-                });
-              }
-            }
+            // Delivery to Telegram is handled by /api/cron/notify
           }
         } catch (tokenError) {
           console.error(`Error validating token ${token.symbol}:`, tokenError);

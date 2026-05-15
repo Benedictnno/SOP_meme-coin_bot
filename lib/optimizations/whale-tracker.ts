@@ -7,6 +7,7 @@ export interface WhaleWallet {
   address: string;
   nickname?: string;
   successfulTrades: number;
+  winRate?: number;
   avgReturn: number;
   lastActive: string;
   clusterId?: string;
@@ -308,7 +309,7 @@ export async function updateWhaleScore(walletAddress: string) {
     if (closedPnLs.length === 0) return;
 
     const successful = closedPnLs.filter(p => p.realizedPnL > 0).length;
-    const winRate = successful / closedPnLs.length;
+    const winRate = (successful / closedPnLs.length) * 100;
 
     // Use actual stored return percentages (set during calculatePnL sell events)
     const avgReturn = closedPnLs.reduce((sum, p) =>

@@ -214,6 +214,12 @@ export async function getTokenDetails(mintAddress: string): Promise<TokenData | 
     // Use first pair (usually highest liquidity)
     const pair = data.pairs[0] as DexPair;
 
+    const socials = {
+      twitter: pair.info?.socials?.find((s: any) => s.type === 'twitter')?.url,
+      telegram: pair.info?.socials?.find((s: any) => s.type === 'telegram')?.url,
+      website: pair.info?.websites?.[0]?.url
+    };
+
     return {
       symbol: pair.baseToken.symbol,
       mint: pair.baseToken.address,
@@ -225,7 +231,8 @@ export async function getTokenDetails(mintAddress: string): Promise<TokenData | 
       priceUSD: pair.priceUsd,
       marketCap: pair.fdv || 0,
       volume24h: pair.volume?.h24 || 0,
-      priceChange24h: pair.priceChange?.h24 || 0
+      priceChange24h: pair.priceChange?.h24 || 0,
+      socials
     };
 
   } catch (error) {
