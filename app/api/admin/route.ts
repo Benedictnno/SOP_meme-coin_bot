@@ -18,7 +18,7 @@ export async function GET() {
         // 1. Fetch Stats
         const totalUsers = await db.collection("users").countDocuments();
         const activeSubscribers = await db.collection("users").countDocuments({
-            subscriptionExpiresAt: { $gt: new Date().toISOString() }
+            subscriptionExpiresAt: { $gt: new Date() }
         });
 
         const payments = await db.collection("payments").find().toArray();

@@ -597,7 +597,7 @@ export async function validateTokenEnhanced(
 
     const [devScore, aiAnalysis, whaleActivity, pumpData] = await Promise.all([
         creatorAddress ? getDeveloperCreditScore(creatorAddress) : Promise.resolve(null),
-        analyzeTokenNarrative(token, settings.aiMode),
+        import('./validation-utils').then(m => m.getOrCreateAIAnalysis(token, settings.aiMode)),
         checkWhaleActivity(token.mint).then(res => ({
             involved: res.whaleInvolved,
             confidence: res.confidence,

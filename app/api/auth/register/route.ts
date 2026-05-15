@@ -39,12 +39,16 @@ export async function POST(request: Request) {
             const trialPeriodMs = 21 * 24 * 60 * 60 * 1000;
             const existingFromIp = await db.collection('users').findOne({ signupIp: clientIp });
             if (existingFromIp) {
-                const ipUserCreatedAt = new Date(existingFromIp.createdAt);
+                const ipUserCreatedAt  = new Date(existingFromIp.createdAt);
                 const ipUserTrialExpiry = new Date(ipUserCreatedAt.getTime() + trialPeriodMs);
-                const hasExpiredTrial = ipUserTrialExpiry < now && !existingFromIp.subscriptionExpiresAt;
+                const hasExpiredTrial   = ipUserTrialExpiry < now && !existingFromIp.subscriptionExpiresAt;
+
                 if (hasExpiredTrial) {
-                    trialDenied = true;
-                    console.log(`[AntiAbuse] IP ${clientIp} — trial denied for new signup (prior expired account: ${existingFromIp.email})`);
+                    // Phase 5.2 — Soft signal only. Shared IPs (offices, universities) would
+                    // produce false positives with a hard block. Log it and flag for manual
+                    // review instead of denying registration outright.
+                    console.log(`[AntiAbuse] Soft flag: IP ${clientIp} has prior expired account (${existingFromIp.email}). Allowing registration.`);
+                    // trialDenied remains false — do NOT block the registration
                 }
             }
         }

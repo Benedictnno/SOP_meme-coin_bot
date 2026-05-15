@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { chatWithGroq } from '@/lib/validators/groq_fallback';
+import { getDatabase } from '@/lib/mongodb';
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -19,6 +20,26 @@ export async function POST(request: Request) {
         }
 
         const lastUserMessage = messages[messages.length - 1].content;
+
+        // Phase 4.3 — Retrieve cached AI analysis to give context to chat
+        const db = await getDatabase();
+        const cacheKey = `ai-analysis-${tokenContext.mint}-balanced`;
+        const cached = await db.collection('app_state').findOne({ key: cacheKey });
+        
+        let initialAnalysisContext = '';
+        if (cached && cached.value) {
+            try {
+                const analysis = JSON.parse(cached.value);
+                initialAnalysisContext = `
+                INITIAL AI ANALYSIS (for context):
+                Sentiment: ${analysis.sentiment}
+                Summary: ${analysis.summary}
+                Potential: ${analysis.potential}
+                `;
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
 
         // Construct System Context
         const systemContext = `
@@ -40,6 +61,7 @@ export async function POST(request: Request) {
         
         LINKS:
         - DexScreener: https://dexscreener.com/solana/${tokenContext.mint || ''}
+        ${initialAnalysisContext}
         
         INSTRUCTIONS:
         - Provide a DEEP ANALYSIS combining the scan data provided above and your knowledge about typical meme coin behavior.

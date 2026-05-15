@@ -7,11 +7,13 @@ import { getDatabase } from '@/lib/mongodb';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const MIN_DISCOVERY_LIQUIDITY = 20_000; // $20k minimum liquidity gate
+
 /**
  * GET /api/cron/discovery
- * CRON A: Fast token discovery. Unblocks execution time.
- * Fetch newly minted tokens with high volume and stores them in pending_tokens.
- * Triggered every 2 mins.
+ * CRON A: Fallback token discovery. Skips execution when the Helius webhook
+ * is active (detected by recent helius_webhook-sourced tokens in pending_tokens).
+ * Triggered every 2 mins — becomes a no-op when webhook is healthy.
  */
 export async function GET(request: NextRequest) {
     try {
@@ -25,28 +27,50 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const db = await getDatabase();
+
+        // Skip if webhook has been active in the last 5 minutes
+        const recentWebhookEvent = await db.collection('pending_tokens').findOne({
+            source: 'helius_webhook',
+            discoveredAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) }
+        });
+
+        if (recentWebhookEvent) {
+            return NextResponse.json({
+                success: true,
+                message: 'Webhook active — cron discovery skipped',
+                skipped: true
+            });
+        }
+
         const minVolumeIncrease = Number(process.env.MIN_VOLUME_INCREASE_PERCENT) || 200;
         
-        console.log('[Cron A] Starting discovery scan...');
+        console.log('[Cron A] Webhook quiet — running fallback discovery scan...');
         const discoveredTokens = await scanDEXScreener(minVolumeIncrease);
         
         if (discoveredTokens.length === 0) {
             return NextResponse.json({ success: true, message: 'No new tokens discovered.' });
         }
 
-        const db = await getDatabase();
-        
-        // Prepare for bulk insert
+        // Phase 4.2: minimum liquidity gate before queuing
+        const filteredTokens = discoveredTokens.filter(t => (t.liquidity ?? 0) >= MIN_DISCOVERY_LIQUIDITY);
+        console.log(`[Cron A] Filtered ${discoveredTokens.length - filteredTokens.length} tokens below $${MIN_DISCOVERY_LIQUIDITY} liquidity`);
+
+        if (filteredTokens.length === 0) {
+            return NextResponse.json({ success: true, message: 'All discovered tokens below liquidity gate.' });
+        }
+
         const pendingTokensColl = db.collection('pending_tokens');
         
-        const operations = discoveredTokens.map(token => ({
+        const operations = filteredTokens.map(token => ({
             updateOne: {
                 filter: { mint: token.mint },
                 update: { 
                     $setOnInsert: { 
                         ...token, 
                         discoveredAt: new Date(),
-                        processing: false 
+                        processing: false,
+                        source: 'cron_discovery'
                     } 
                 },
                 upsert: true
@@ -55,11 +79,11 @@ export async function GET(request: NextRequest) {
 
         const result = await pendingTokensColl.bulkWrite(operations);
 
-        console.log(`[Cron A] Discovered ${discoveredTokens.length} tokens. Upserted ${result.upsertedCount}.`);
+        console.log(`[Cron A] Discovered ${filteredTokens.length} tokens. Upserted ${result.upsertedCount}.`);
 
         return NextResponse.json({
             success: true,
-            discovered: discoveredTokens.length,
+            discovered: filteredTokens.length,
             upserted: result.upsertedCount,
             message: 'Discovery complete.'
         });
@@ -69,3 +93,4 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }
+

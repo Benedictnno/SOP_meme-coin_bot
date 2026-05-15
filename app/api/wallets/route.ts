@@ -5,6 +5,12 @@ import { getDatabase } from '@/lib/mongodb';
 import { TrackedWallet } from '@/types';
 import { ObjectId } from 'mongodb';
 
+// Phase 5.3 — Proper Solana base58 address validation
+function isValidSolanaAddress(address: string): boolean {
+    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    return base58Regex.test(address);
+}
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -69,8 +75,8 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { address, label } = body;
 
-        if (!address || address.length < 32) {
-            return NextResponse.json({ success: false, error: 'Valid Solana address is required' }, { status: 400 });
+        if (!address || !isValidSolanaAddress(address)) {
+            return NextResponse.json({ success: false, error: 'Invalid Solana wallet address' }, { status: 400 });
         }
 
         const userId = (session.user as any).id;

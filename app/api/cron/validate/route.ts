@@ -3,8 +3,6 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getDatabase } from '@/lib/mongodb';
 import { createEnhancedAlert } from '@/lib/validation-utils';
-import { sendTelegramAlert } from '@/lib/telegram';
-import { getAllActiveUsers } from '@/lib/users';
 import { BotSettings } from '@/types';
 
 export const runtime = 'nodejs';
@@ -12,9 +10,9 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/cron/validate
- * CRON B: Validates top pending tokens heavily.
- * Ensures Tier 3 AI and full checks pass without hitting API limits.
- * Triggered every 30 seconds.
+ * CRON B: Validates top pending tokens and writes results to delivery_queue.
+ * User fan-out (Telegram sends) has been moved to /api/cron/notify.
+ * Triggered every 1 minute via Vercel cron.
  */
 export async function GET(request: NextRequest) {
     try {
@@ -31,10 +29,10 @@ export async function GET(request: NextRequest) {
         const startTime = Date.now();
         const db = await getDatabase();
         const pendingTokensColl = db.collection('pending_tokens');
-        const recentAlertsColl = db.collection('sent_alerts');
 
         // Fetch top 5 pending tokens, ordered by highest volume increase
-        const tokensToProcess = await pendingTokensColl.find({ processing: false })
+        const tokensToProcess = await pendingTokensColl
+            .find({ processing: false })
             .sort({ volumeIncrease: -1 })
             .limit(5)
             .toArray();
@@ -43,14 +41,13 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: true, message: 'No pending tokens to validate.' });
         }
 
-        // Mark as processing immediately to prevent parallel crons overlapping
+        // Mark as processing immediately to prevent parallel cron overlap
         const tokenMints = tokensToProcess.map(t => t.mint);
         await pendingTokensColl.updateMany(
             { mint: { $in: tokenMints } },
             { $set: { processing: true } }
         );
 
-        const usersToAlert = await getAllActiveUsers();
         const masterSettings: BotSettings = {
             minLiquidity: Number(process.env.MIN_LIQUIDITY_USD) || 50000,
             maxTopHolderPercent: Number(process.env.MAX_TOP_HOLDER_PERCENT) || 10,
@@ -61,78 +58,39 @@ export async function GET(request: NextRequest) {
         };
 
         const validatedMints: string[] = [];
-
-        // Pre-fetch recent alerts to prevent massive connection pooling
-        const recentAlerts = await recentAlertsColl.find({
-            timestamp: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-        }).toArray();
-        const recentAlertsSet = new Set(recentAlerts.map(a => `${a.userId}-${a.mint}`));
-
         let validCount = 0;
-        const pendingInserts: any[] = [];
 
         // Execute serially (concurrency=1) to prevent RPC flooding.
-        // We have decoupled from the 10-second limit since CRON tasks via 3rd party
-        // generally run until Lambda timeout.
         for (const token of tokensToProcess as any[]) {
             const tokenData = { ...token };
             delete tokenData._id;
             delete tokenData.discoveredAt;
             delete tokenData.processing;
-            
+            delete tokenData.source;
+
             try {
-                // Pass skipBundleDetector = true because Cron Validation doesn't need 200 RPC checks per token
+                // skipBundleDetector=true — bundle detection (200 RPC calls) is not needed here
                 const alert = await createEnhancedAlert(tokenData, masterSettings, true);
-                let sentToAnyUser = false;
 
-                for (const user of usersToAlert) {
-                    const userSettings = user.settings || masterSettings;
-                    const meetsLiquidity = tokenData.liquidity >= (userSettings.minLiquidity || 0);
-                    const meetsHolders = (tokenData.topHolderPercent || 100) <= (userSettings.maxTopHolderPercent || 100);
-                    const meetsScore = alert.compositeScore >= 30; // Temporarily lowered from (userSettings.minCompositeScore || 0)
-
-                    if (meetsLiquidity && meetsHolders && meetsScore) {
-                        const userIdStr = user._id?.toString() || 'unknown';
-                        const alertKey = `${userIdStr}-${tokenData.mint}`;
-                        const lastSent = recentAlertsSet.has(alertKey);
-
-                        if (!lastSent && (userSettings.enableTelegramAlerts ?? true) && user.telegramChatId) {
-                            await sendTelegramAlert(alert, user.telegramChatId);
-                            
-                            pendingInserts.push({
-                                userId: userIdStr,
-                                mint: tokenData.mint,
-                                symbol: tokenData.symbol,
-                                type: 'alert',
-                                timestamp: new Date()
-                            });
-                            recentAlertsSet.add(alertKey);
-                            sentToAnyUser = true;
-                        }
-                    }
+                // createEnhancedAlert writes to signals + delivery_queue when valid & score >= 30
+                if (alert.isValid && alert.compositeScore >= 30) {
+                    validCount++;
                 }
-                
-                if (sentToAnyUser) validCount++;
-                validatedMints.push(token.mint);
 
+                validatedMints.push(token.mint);
             } catch (err) {
                 console.error(`[Cron B] Error validating ${token.symbol}:`, err);
-                validatedMints.push(token.mint); // Remove it on failure to unblock pipeline
+                validatedMints.push(token.mint); // Remove from queue even on failure to unblock pipeline
             }
         }
 
-        if (pendingInserts.length > 0) {
-            await recentAlertsColl.insertMany(pendingInserts);
-        }
-
-        // Cleanup processed
+        // Cleanup processed tokens from pending queue
         await pendingTokensColl.deleteMany({ mint: { $in: validatedMints } });
 
-        // Update total scanned tokens stat
+        // Update global stats
         if (validatedMints.length > 0) {
-            const statsColl = db.collection('system_stats');
-            await statsColl.updateOne(
-                { _id: 'global_stats' },
+            await db.collection('system_stats').updateOne(
+                { _id: 'global_stats' as any },
                 { $inc: { totalTokensScanned: validatedMints.length } },
                 { upsert: true }
             );

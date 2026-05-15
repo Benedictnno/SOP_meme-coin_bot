@@ -70,8 +70,20 @@ export async function ensureIndexes() {
         await db.collection('signals').createIndex({ 'token.mint': 1 });
         await db.collection('whale_wallets').createIndex({ address: 1 }, { unique: true });
         await db.collection('wallet_pnl').createIndex({ walletAddress: 1, tokenMint: 1 });
+
+        // Delivery queue: TTL auto-expires undelivered items after 1 hour
+        await db.collection('delivery_queue').createIndex(
+            { expiresAt: 1 },
+            { expireAfterSeconds: 0 }
+        );
+        await db.collection('delivery_queue').createIndex({ delivered: 1, createdAt: -1 });
+
+        // Pipeline health: fast lookup of recent webhook-sourced discoveries
+        await db.collection('pending_tokens').createIndex({ source: 1, discoveredAt: -1 });
+
         console.log('MongoDB Indexes initialized successfully.');
     } catch (error) {
         console.error('Error initializing MongoDB indexes:', error);
     }
 }
+

@@ -39,6 +39,7 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [triggerStatus, setTriggerStatus] = useState<{ [key: string]: string }>({});
+    const [health, setHealth] = useState<any>(null);
 
     const triggerCron = async (endpoint: string, name: string) => {
         setTriggerStatus(prev => ({ ...prev, [name]: 'Running...' }));
@@ -64,12 +65,21 @@ export default function AdminDashboard() {
 
     const fetchData = async () => {
         try {
-            const res = await fetch('/api/admin');
-            const data = await res.json();
-            if (data.success) {
-                setStats(data.stats);
-                setUsers(data.users);
-                setRecentSignals(data.recentSignals || []);
+            const [adminRes, healthRes] = await Promise.all([
+                fetch('/api/admin'),
+                fetch('/api/admin/health')
+            ]);
+            
+            const adminData = await adminRes.json();
+            if (adminData.success) {
+                setStats(adminData.stats);
+                setUsers(adminData.users);
+                setRecentSignals(adminData.recentSignals || []);
+            }
+
+            if (healthRes.ok) {
+                const healthData = await healthRes.json();
+                setHealth(healthData.pipeline);
             }
         } catch (err) {
             console.error('Admin fetch error:', err);
@@ -108,6 +118,42 @@ export default function AdminDashboard() {
                         <p className="text-xs text-neutral-500 font-bold uppercase tracking-[0.2em] mt-1">Admin Oversight Console</p>
                     </div>
                 </div>
+
+                {/* Pipeline Health */}
+                {health && (
+                    <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl mb-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400">
+                                Pipeline Health
+                            </h2>
+                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                health.webhookActive 
+                                    ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
+                                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            }`}>
+                                {health.webhookActive ? 'Webhook Active' : 'Webhook Down'}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <div className="text-2xl font-bold">{health.pendingValidation}</div>
+                                <div className="text-xs text-neutral-500">Awaiting Validation</div>
+                            </div>
+                            <div>
+                                <div className="text-2xl font-bold">{health.pendingDelivery}</div>
+                                <div className="text-xs text-neutral-500">Awaiting Delivery</div>
+                            </div>
+                            <div>
+                                <div className="text-2xl font-bold">{health.discoveriesLastHour}</div>
+                                <div className="text-xs text-neutral-500">Discoveries (1h)</div>
+                            </div>
+                            <div>
+                                <div className="text-2xl font-bold">{health.deliveriesLastHour}</div>
+                                <div className="text-xs text-neutral-500">Alerts Sent (1h)</div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Manual Cron Controls */}
                 <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl">

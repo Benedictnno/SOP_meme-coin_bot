@@ -1,12 +1,41 @@
 // lib/optimizations/time-patterns.ts
 // ADVANCED OPTIMIZATION: Time-of-day pattern analysis
 
+import { getDatabase } from '@/lib/mongodb';
+
 export interface TimePattern {
   hour: number;
   alertCount: number;
   successRate: number;
   avgReturn: number;
 }
+
+// ---------------------------------------------------------------------------
+// MongoDB-backed storage helpers (replaces window.localStorage)
+// ---------------------------------------------------------------------------
+
+async function getStorageValue(key: string): Promise<string | null> {
+  try {
+    const db = await getDatabase();
+    const result = await db.collection('app_state').findOne({ key });
+    return result ? result.value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setStorageValue(key: string, value: string): Promise<void> {
+  const db = await getDatabase();
+  await db.collection('app_state').updateOne(
+    { key },
+    { $set: { key, value, updatedAt: new Date() } },
+    { upsert: true }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Time pattern helpers
+// ---------------------------------------------------------------------------
 
 /**
  * Track when valid alerts appear and their success rates
@@ -18,7 +47,7 @@ export async function recordTimePattern(
 ): Promise<void> {
   try {
     const storageKey = 'time-patterns';
-    
+
     let patterns: TimePattern[] = Array.from({ length: 24 }, (_, i) => ({
       hour: i,
       alertCount: 0,
@@ -27,18 +56,18 @@ export async function recordTimePattern(
     }));
 
     try {
-      const stored = await window.localStorage.get(storageKey);
+      const stored = await getStorageValue(storageKey);
       if (stored) {
-        patterns = JSON.parse(stored.value);
+        patterns = JSON.parse(stored);
       }
-    } catch (err) {
+    } catch {
       // Use default
     }
 
     // Update pattern for this hour
     const hourPattern = patterns[hour];
     hourPattern.alertCount++;
-    
+
     // Update success rate (weighted average)
     const prevSuccessCount = hourPattern.successRate * (hourPattern.alertCount - 1);
     const newSuccessCount = prevSuccessCount + (wasSuccessful ? 1 : 0);
@@ -49,7 +78,7 @@ export async function recordTimePattern(
     const newTotalReturn = prevTotalReturn + returnPercent;
     hourPattern.avgReturn = newTotalReturn / hourPattern.alertCount;
 
-    await window.localStorage.set(storageKey, JSON.stringify(patterns));
+    await setStorageValue(storageKey, JSON.stringify(patterns));
 
   } catch (error) {
     console.error('Time pattern recording error:', error);
@@ -66,17 +95,17 @@ export async function getOptimalTradingHours(): Promise<{
 }> {
   try {
     const storageKey = 'time-patterns';
-    const stored = await window.localStorage.get(storageKey);
-    
+    const stored = await getStorageValue(storageKey);
+
     if (!stored) {
       return {
         bestHours: [14, 15, 16], // Default to US market open
-        worstHours: [2, 3, 4],    // Default to low activity hours
+        worstHours: [2, 3, 4],   // Default to low activity hours
         recommendation: 'Insufficient data - using defaults (US market hours)'
       };
     }
 
-    const patterns: TimePattern[] = JSON.parse(stored.value);
+    const patterns: TimePattern[] = JSON.parse(stored);
 
     // Filter hours with at least 5 alerts
     const significantHours = patterns.filter(p => p.alertCount >= 5);
@@ -165,13 +194,13 @@ export async function getDynamicScanInterval(currentHour: number): Promise<{
 export async function getTimeMultiplier(hour: number): Promise<number> {
   try {
     const storageKey = 'time-patterns';
-    const stored = await window.localStorage.get(storageKey);
-    
+    const stored = await getStorageValue(storageKey);
+
     if (!stored) {
       return 1.0; // No boost
     }
 
-    const patterns: TimePattern[] = JSON.parse(stored.value);
+    const patterns: TimePattern[] = JSON.parse(stored);
     const hourPattern = patterns[hour];
 
     if (hourPattern.alertCount < 5) {
@@ -201,16 +230,16 @@ export async function getTimeMultiplier(hour: number): Promise<number> {
 export async function exportTimeAnalysis(): Promise<string> {
   try {
     const storageKey = 'time-patterns';
-    const stored = await window.localStorage.get(storageKey);
-    
+    const stored = await getStorageValue(storageKey);
+
     if (!stored) {
       return 'No time pattern data available';
     }
 
-    const patterns: TimePattern[] = JSON.parse(stored.value);
+    const patterns: TimePattern[] = JSON.parse(stored);
 
     let csv = 'Hour,Alert Count,Success Rate,Avg Return %\n';
-    
+
     patterns.forEach(p => {
       if (p.alertCount > 0) {
         csv += `${p.hour}:00,${p.alertCount},${(p.successRate * 100).toFixed(1)}%,${p.avgReturn.toFixed(1)}%\n`;
@@ -224,29 +253,6 @@ export async function exportTimeAnalysis(): Promise<string> {
     return 'Error exporting time analysis';
   }
 }
-
-/**
- * USAGE EXAMPLE:
- * 
- * 1. Record Every Alert Outcome
- *    await recordTimePattern(
- *      new Date().getHours(),
- *      tradeWasSuccessful,
- *      returnPercent
- *    );
- * 
- * 2. Adjust Scan Frequency
- *    const { interval } = await getDynamicScanInterval(currentHour);
- *    setScanInterval(interval);
- * 
- * 3. Apply Time-Based Scoring
- *    const multiplier = await getTimeMultiplier(currentHour);
- *    const adjustedScore = baseScore * multiplier;
- * 
- * 4. Weekly Analysis
- *    const csv = await exportTimeAnalysis();
- *    // Analyze to optimize strategy
- */
 
 /**
  * Day of week patterns
@@ -263,7 +269,7 @@ export async function getDayOfWeekPattern(): Promise<{
 }> {
   // Similar implementation to time patterns but for days of week
   // Left as exercise - track Monday-Sunday success rates
-  
+
   return {
     bestDays: ['Tuesday', 'Wednesday', 'Thursday'], // Midweek typically best
     worstDays: ['Saturday', 'Sunday'] // Weekends typically slower

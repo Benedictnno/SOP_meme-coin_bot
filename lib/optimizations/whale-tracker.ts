@@ -20,6 +20,7 @@ export interface WalletPnL {
   totalInvestedSol: number;
   tokensAccumulated: number;
   realizedPnL: number;
+  returnPercent?: number; // actual % return calculated at close
   status: 'open' | 'closed';
   lastUpdated: string;
 }
@@ -263,9 +264,16 @@ export async function calculatePnL(walletAddress: string, swaps: any[]) {
             const newTokens = pnlRef.tokensAccumulated - swap.tokenAmount;
             const newInvested = pnlRef.totalInvestedSol - costBasis;
 
+            // Calculate actual return percentage at the point of sell
+            const returnPercent = costBasis > 0
+                ? ((swap.solAmount - costBasis) / costBasis) * 100
+                : 0;
+
             pnlRef.totalInvestedSol = newInvested;
             pnlRef.tokensAccumulated = newTokens;
             pnlRef.realizedPnL = pnlRef.realizedPnL + tradePnL;
+            // Accumulate weighted return percent across partial sells
+            pnlRef.returnPercent = (pnlRef.returnPercent ?? 0) + (returnPercent * proportionSold);
             pnlRef.status = newTokens <= 0.01 ? 'closed' : 'open';
             pnlRef.lastUpdated = swap.timestamp;
         }
@@ -289,29 +297,22 @@ export async function calculatePnL(walletAddress: string, swaps: any[]) {
 }
 
 /**
- * Aggregates a wallet's performance based on WalletPnL entries
+ * Aggregates a wallet's performance based on WalletPnL entries.
+ * Uses actual stored returnPercent values calculated during calculatePnL.
  */
 export async function updateWhaleScore(walletAddress: string) {
     const db = await getDatabase();
     const closedPnLs = await db.collection<WalletPnL>('wallet_pnl')
         .find({ walletAddress, status: 'closed' }).toArray();
-        
+
     if (closedPnLs.length === 0) return;
-    
-    let successful = 0;
-    let totalReturnPct = 0;
-    
-    for (const pnl of closedPnLs) {
-        if (pnl.realizedPnL > 0) successful++;
-        // Estimating % return from original basis
-        // Actually, realizedPnL = returnSol - costBasis. So return% = realizedPnL / costBasis. 
-        // We can't access original costBasis easily here without re-calculating, 
-        // but we can estimate or rely on the total realized vs total invested across trades.
-        totalReturnPct += (pnl.realizedPnL > 0 ? 50 : -20); // simplified standing
-    }
-    
+
+    const successful = closedPnLs.filter(p => p.realizedPnL > 0).length;
     const winRate = successful / closedPnLs.length;
-    const avgReturn = totalReturnPct / closedPnLs.length;
+
+    // Use actual stored return percentages (set during calculatePnL sell events)
+    const avgReturn = closedPnLs.reduce((sum, p) =>
+        sum + (p.returnPercent ?? 0), 0) / closedPnLs.length;
 
     await db.collection('whale_wallets').updateOne(
         { address: walletAddress },

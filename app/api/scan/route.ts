@@ -61,6 +61,44 @@ export async function POST(request: Request) {
         );
       }
 
+      // Phase 5.1 — Per-user rate limiting (5 manual scans per minute)
+      const rateLimitKey  = `rate-limit-scan-${userId}`;
+      const windowMs      = 60 * 1000;
+      const maxRequests   = 5;
+      const scanDb        = await getDatabase();
+      const rateRecord    = await scanDb.collection('app_state').findOne({ key: rateLimitKey });
+
+      if (rateRecord) {
+        const windowStart = new Date(rateRecord.windowStart);
+        const now         = new Date();
+
+        if (now.getTime() - windowStart.getTime() < windowMs) {
+          if (rateRecord.count >= maxRequests) {
+            return NextResponse.json(
+              { success: false, error: 'Rate limit exceeded. Please wait before scanning again.' },
+              { status: 429 }
+            );
+          }
+          await scanDb.collection('app_state').updateOne(
+            { key: rateLimitKey },
+            { $inc: { count: 1 } }
+          );
+        } else {
+          // Reset window
+          await scanDb.collection('app_state').updateOne(
+            { key: rateLimitKey },
+            { $set: { windowStart: new Date(), count: 1 } }
+          );
+        }
+      } else {
+        await scanDb.collection('app_state').insertOne({
+          key: rateLimitKey,
+          windowStart: new Date(),
+          count: 1
+        });
+      }
+
+
       usersToAlert = [user];
       const bodySettings = await request.json().catch(() => ({}));
       masterSettings = {

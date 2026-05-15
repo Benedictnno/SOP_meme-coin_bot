@@ -9,5 +9,23 @@
         }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/discovery",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/validate",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/notify",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/whales",
+      "schedule": "*/5 * * * *"
+    }
   ]
 }
